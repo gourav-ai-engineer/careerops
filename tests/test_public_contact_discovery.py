@@ -1,6 +1,11 @@
 import pytest
 
-from app.public_contact_discovery import ensure_allowed_source, extract_phone_candidates
+from app.public_contact_discovery import (
+    MAX_SOURCE_URLS,
+    discover_public_phones,
+    ensure_allowed_source,
+    extract_phone_candidates,
+)
 
 
 def test_extracts_and_deduplicates_phone_candidates() -> None:
@@ -23,3 +28,12 @@ def test_rejects_external_domains() -> None:
 
 def test_accepts_company_subdomain() -> None:
     ensure_allowed_source("https://careers.example.com/contact", "example.com")
+
+
+@pytest.mark.asyncio
+async def test_rejects_too_many_source_urls() -> None:
+    with pytest.raises(ValueError, match="maximum"):
+        await discover_public_phones(
+            ["https://example.com/contact"] * (MAX_SOURCE_URLS + 1),
+            "example.com",
+        )
