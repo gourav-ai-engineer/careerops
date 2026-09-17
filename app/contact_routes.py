@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, HttpUrl
 from sqlalchemy.orm import Session
 
@@ -9,6 +9,7 @@ from app.contact_discovery import (
 )
 from app.contact_service import upsert_public_contact
 from app.database import get_db
+from app.public_contact_discovery import PublicPhoneCandidate, discover_public_phones
 
 router = APIRouter(prefix="/contacts", tags=["contacts"])
 
@@ -42,6 +43,15 @@ class ContactUpsertResponse(BaseModel):
     company_id: int
     created: bool
     verification_status: str | None
+
+
+class PublicPhoneDiscoveryRequest(BaseModel):
+    source_urls: list[HttpUrl]
+    allowed_domain: str
+
+
+class PublicPhoneDiscoveryResponse(BaseModel):
+    candidates: list[PublicPhoneCandidate]
 
 
 @router.post("/validate", response_model=ContactValidationResponse)
@@ -79,8 +89,6 @@ def create_or_update_contact(
     )
     issues = validate_public_contact(candidate)
     if issues:
-        from fastapi import HTTPException
-
         raise HTTPException(status_code=422, detail=issues)
 
     contact, created = upsert_public_contact(
@@ -104,3 +112,17 @@ def create_or_update_contact(
         created=created,
         verification_status=contact.verification_status,
     )
+
+
+@router.post("/discover-public", response_model=PublicPhoneDiscoveryResponse)
+async def discover_public_contact_phones(
+    payload: PublicPhoneDiscoveryRequest,
+) -> PublicPhoneDiscoveryResponse:
+    try:
+        candidates = await discover_public_phones(
+            source_urls=[str(url) for url in payload.source_urls],
+            allowed_domain=payload.allowed_domain,
+        )
+    except (ValueError, httpx.HTTPError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return PublicPhoneDiscoveryResponse(candidates=candidates)
