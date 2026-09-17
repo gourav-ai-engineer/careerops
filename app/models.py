@@ -49,9 +49,12 @@ class Contact(Base):
     title: Mapped[str | None] = mapped_column(String(255))
     email: Mapped[str | None] = mapped_column(String(320))
     normalized_email: Mapped[str | None] = mapped_column(String(320), unique=True, index=True)
+    phone: Mapped[str | None] = mapped_column(String(40))
+    phone_type: Mapped[str | None] = mapped_column(String(50))
     contact_type: Mapped[str | None] = mapped_column(String(100))
     source_url: Mapped[str | None] = mapped_column(Text)
     verification_status: Mapped[str | None] = mapped_column(String(50))
+    verification_confidence: Mapped[str | None] = mapped_column(String(20))
     verification_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     priority: Mapped[str | None] = mapped_column(String(10))
 
