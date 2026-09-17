@@ -10,6 +10,7 @@ import httpx
 PHONE_PATTERN = re.compile(
     r"(?<!\d)(?:\+?\d[\d\s().-]{7,}\d)(?!\d)"
 )
+MAX_SOURCE_URLS = 20
 
 
 @dataclass(frozen=True)
@@ -59,6 +60,11 @@ async def discover_public_phones(
     allowed_domain: str,
     timeout_seconds: float = 10.0,
 ) -> list[PublicPhoneCandidate]:
+    if not source_urls:
+        return []
+    if len(source_urls) > MAX_SOURCE_URLS:
+        raise ValueError(f"A maximum of {MAX_SOURCE_URLS} source URLs is allowed per request.")
+
     candidates: list[PublicPhoneCandidate] = []
     async with httpx.AsyncClient(
         timeout=timeout_seconds,
@@ -69,10 +75,12 @@ async def discover_public_phones(
             ensure_allowed_source(source_url, allowed_domain)
             response = await client.get(source_url)
             response.raise_for_status()
+            # Validate the final URL too, preventing redirects to unrelated domains.
+            ensure_allowed_source(str(response.url), allowed_domain)
             content_type = response.headers.get("content-type", "")
             if "text/html" not in content_type and "text/plain" not in content_type:
                 continue
-            candidates.extend(extract_phone_candidates(response.text, source_url))
+            candidates.extend(extract_phone_candidates(response.text, str(response.url)))
 
     unique: dict[tuple[str, str], PublicPhoneCandidate] = {
         (item.phone, item.source_url): item for item in candidates
