@@ -11,6 +11,17 @@ app = FastAPI(
 app.include_router(contact_router)
 
 
+@app.get("/", tags=["system"])
+def root() -> dict[str, str]:
+    """Provide a discoverable service entry point."""
+    return {
+        "service": "careerops",
+        "status": "ok",
+        "docs": "/docs",
+        "health": "/health",
+    }
+
+
 @app.get("/health", tags=["system"])
 def health_check() -> dict[str, str]:
     """Return a basic service health response."""
