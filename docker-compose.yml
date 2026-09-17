@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: careerops-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-careerops}
+      POSTGRES_USER: ${POSTGRES_USER:-careerops}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-local-only}
+    ports:
+      - "5432:5432"
+    volumes:
+      - careerops_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-careerops} -d ${POSTGRES_DB:-careerops}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  careerops_pgdata:
