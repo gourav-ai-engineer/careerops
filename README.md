@@ -1,75 +1,58 @@
 # CareerOps
 
-CareerOps is a safety-first career intelligence pipeline for India-based AI/ML, GenAI, software, backend, and data opportunities, including NIT Silchar campus hiring.
+CareerOps is a safety-first career intelligence platform for India-based AI/ML, GenAI, software, backend, platform, and data opportunities, including NIT Silchar campus hiring.
 
-## Current capabilities
+## Complete platform
 
-- FastAPI service with a health endpoint.
-- PostgreSQL/SQLAlchemy foundation for companies, jobs, job-contact relationships, requirements, fit assessments, contact evidence, and status history.
-- Job ingestion, deterministic deduplication, search, pagination, detail retrieval, and status lifecycle.
-- Conservative official-source screening with persisted job-source evidence.
-- Explicit verification decisions with an auditable status history.
-- Extracted job requirements persisted for downstream matching.
-- Candidate-profile validation and deterministic profile-based fit assessment.
-- Persistent fit assessments that can be recalculated idempotently.
-- Provider-independent public contact discovery adapters and contact evidence records.
-- Smartsheet dry-run planning and idempotent job synchronization for verified/later-stage jobs.
-- Smartsheet contact synchronization for linked, source-checked/verified public professional contacts.
+The planned application architecture is implemented across the API, database, provider layer, dashboard, synchronization layer, resume workflow, and scheduled-workflow integration.
 
-## Smartsheet synchronization
+Core capabilities:
+- FastAPI service with health/readiness checks, request IDs, logging, optional API-key protection, and CORS.
+- PostgreSQL source of truth for jobs, companies, requirements, verification evidence, lifecycle history, fit assessments, contacts, provider evidence, job-contact links, processing runs, audit events, master resume versions, and resume drafts.
+- CSV and WhatsApp-export ingestion, typed extraction, deterministic deduplication, search, pagination, and lifecycle transitions.
+- Official employer-domain screening and live HTTPS source checking with redirect validation.
+- Explicit verification decisions with durable evidence.
+- Candidate profile persistence and explainable fit assessment.
+- Provider-based public professional contact discovery with an official-site adapter and optional Hunter source-backed professional email adapter.
+- Provider rate limiting and retry runtime.
+- Contact duplicate detection and explicit merge.
+- Smartsheet dry-run/apply synchronization for verified/later-stage jobs and linked professional contacts.
+- Master resume storage and reviewable job drafts that never invent claims and never overwrite the master automatically.
+- Processing-run records, audit events, and request correlation IDs.
+- Next.js operator dashboard.
+- Docker Compose for PostgreSQL, API, and dashboard.
+- Windmill-ready orchestration scripts.
 
-The existing AI & SDE job tracker uses Company, Role, Location, Eligibility, Fit Score, Application Status, Apply Link, Source, Last Checked, Recruiter / Contact, Recruiter LinkedIn, and Recruiter Verification.
+## API surface
 
-Job endpoints:
+System: GET /, GET /health, GET /health/db
+Jobs: GET /jobs, GET /jobs/{id}, POST /jobs/intake, PATCH /jobs/{id}/status, POST /jobs/{id}/verify-live, POST /jobs/{id}/fit-assessment, POST /jobs/fit-assessments/verified
+Ingestion: POST /ingestion/csv, POST /ingestion/whatsapp-export, POST /pipeline/ingest, POST /extraction/jobs
+Contacts: POST /contacts, POST /contacts/discover, GET /contacts/list, GET /contacts/duplicates, POST /contacts/merge
+Resume: GET /resume/master, PUT /resume/master, POST /resume/drafts/{job_id}, GET /resume/drafts, PATCH /resume/drafts/{draft_id}
+Dashboard: GET /dashboard/summary
+Runs: GET /runs
+Smartsheet: POST /sync/smartsheet/dry-run, POST /sync/smartsheet/apply, POST /sync/smartsheet/contacts/dry-run, POST /sync/smartsheet/contacts/apply
 
-    POST /sync/smartsheet/dry-run
-    POST /sync/smartsheet/apply
+## Local setup
 
-Contact endpoints:
+Copy .env.example to .env. Run docker compose up --build, or install the Python package in a virtual environment and run python -m app.init_db.
+Open http://localhost:3000 for the dashboard or http://localhost:8000/docs for the API.
 
-    POST /sync/smartsheet/contacts/dry-run
-    POST /sync/smartsheet/contacts/apply
+Important variables include DATABASE_URL, SMARTSHEET_ACCESS_TOKEN, SMARTSHEET_JOBS_SHEET_ID, SMARTSHEET_CAMPUS_SHEET_ID, HUNTER_API_KEY, API_KEY, FRONTEND_ORIGIN, HTTP_TIMEOUT_SECONDS, PROVIDER_REQUESTS_PER_MINUTE, and LOG_LEVEL.
 
-Contact synchronization updates existing job rows only. It does not invent LinkedIn URLs or contact data. Only contact records with source_checked or verified status are synchronized.
+Never commit .env, tokens, API keys, or private contact data.
 
-Local configuration:
+## Operational sequence
 
-    SMARTSHEET_ACCESS_TOKEN=<local-secret>
-    SMARTSHEET_JOBS_SHEET_ID=3084190078947204
+Ingest source data -> extract/normalize -> deduplicate -> screen official source -> live-check when useful -> explicitly verify -> calculate fit -> discover public professional contacts -> preview Smartsheet changes -> apply reviewed sync -> generate/review resume draft.
 
-## Job verification
+PostgreSQL is the system of record. Smartsheet is the operational view. No workflow submits applications automatically.
 
-CareerOps distinguishes screening from verification. A company-domain match is evidence that a URL is hosted on the stored employer domain or a subdomain; it is not proof of job ownership by itself. A job is marked verified only through an explicit verification decision, which is stored together with source evidence and status history.
+## Safety
 
-## Candidate fit
+Only source-backed professional contact information is supported. The platform does not infer personal phone numbers, bypass authentication, scrape private profiles, or treat inferred contact data as verified. Resume drafts are reviewable and require explicit approval before use.
 
-For verified and later-stage jobs, CareerOps can compare persisted job requirements with the saved candidate profile. The assessment records matched and missing skills, role-family match, location match, eligibility match, a 0–100 rule-based score, and a human-readable explanation.
+## Status
 
-## Contact discovery
-
-Contact discovery uses a provider adapter contract so future services can be added without rewriting the persistence layer. The current provider reads public business contact details only from HTTPS pages on the supplied employer domain or subdomains.
-
-## Database setup
-
-For existing databases after the recruiter LinkedIn field was added, run:
-
-    .\.venv\Scripts\python.exe -m app.init_db
-
-This creates missing tables and applies the contact LinkedIn column migration.
-
-## Run locally
-
-    .\.venv\Scripts\python.exe -m uvicorn app.main:app --reload
-
-Open the interactive API documentation at http://127.0.0.1:8000/docs.
-
-## Contact-data safety rules
-
-CareerOps only accepts legitimately published professional contact information, such as company switchboards, official recruitment helplines, and publicly listed work phones. It does not infer numbers, bypass logins, scrape private profiles, or store private/personal mobile numbers.
-
-## Planned next steps
-
-1. Add additional compliant contact-provider adapters with explicit credentials and rate limits.
-2. Add scheduled discovery and monitoring.
-3. Add dashboard views for verification, fit, contacts, and application progress.
-4. Add stronger migration management with Alembic.
+Implementation is complete for the planned architecture. The next step is the dedicated integration and acceptance test pass on the connected environment.

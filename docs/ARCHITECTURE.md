@@ -1,66 +1,38 @@
 # CareerOps Architecture
 
-CareerOps is a safety-first career intelligence platform for India-based AI/ML, GenAI, software, backend, platform, and data opportunities.
+## End-to-end design
 
-## System design
+Sources (CSV/WhatsApp exports, approved feeds/APIs, manual inputs)
+-> FastAPI ingestion
+-> normalization/extraction
+-> deterministic deduplication
+-> official-domain screening and optional live source checking
+-> explicit verification
+-> requirements + candidate fit
+-> public professional contact providers
+-> PostgreSQL source of truth
+-> Smartsheet operational view
+-> Next.js dashboard
+-> Windmill scheduled orchestration
 
-```text
-Sources (exports, RSS, approved APIs, manual uploads)
-        |
-        v
-FastAPI ingestion API
-        |
-        v
-Normalization -> validation -> deduplication
-        |
-        +--> Official job verification
-        +--> Eligibility and skill-fit analysis
-        +--> Public professional contact discovery
-        +--> Resume tailoring draft generation
-        |
-        v
-PostgreSQL (system of record)
-        |
-        +--> Windmill scheduled workflows
-        +--> Smartsheet synchronization
-        +--> Web dashboard
-```
+## Backend boundaries
 
-## Design principles
+The API is split by domain: ingestion, jobs, verification, contacts, candidate profile, resume, dashboard, runs, and Smartsheet sync. External providers implement the ContactProvider contract.
 
-1. PostgreSQL is the source of truth; Smartsheet is a synchronized operational view.
-2. Every job and contact retains source evidence and verification status.
-3. No private/personal phone-number inference, scraping, login bypass, or unauthorized enrichment.
-4. Resume changes are drafts until explicitly approved by the user.
-5. Smartsheet writes support dry-run previews and idempotent upserts.
-6. Provider integrations are replaceable through adapters.
-7. Failures are observable, retryable, and safe to rerun.
+## Data guarantees
 
-## Core modules
+- Job identity is deterministic and deduplicated.
+- Verification is distinct from source screening.
+- Fit assessments are explainable and tied to a candidate profile.
+- Contact evidence retains provider, source URL, status, confidence, and timestamp.
+- Smartsheet writes have dry-run/apply separation, changed-cell updates, and no delete path.
+- Resume tailoring is draft-only and does not fabricate claims.
+- Processing runs and audit events support traceability.
 
-- `ingestion`: receives job messages, exports, feeds, and API payloads.
-- `verification`: checks official employer sources and records evidence.
-- `deduplication`: uses canonical URL, normalized company/title/location, and content fingerprints.
-- `scoring`: evaluates role fit against the user's profile and target preferences.
-- `contact_discovery`: finds only legitimately published professional contact information.
-- `resume_engine`: creates versioned, user-reviewable resume drafts.
-- `smartsheet_sync`: synchronizes approved records with idempotency safeguards.
-- `workflows`: scheduled and event-driven Windmill orchestration.
+## Security
 
-## Initial delivery order
+Credentials are environment-only. Optional API-key protection is provided by middleware. CORS is restricted to the configured frontend origin. Live source checking accepts HTTPS employer-domain URLs and blocks private/loopback targets and off-domain redirects.
 
-1. Stabilize API configuration and database migrations.
-2. Add job, source, evidence, and processing-run models.
-3. Implement ingestion and deterministic deduplication.
-4. Add official-source verification adapters.
-5. Add Smartsheet dry-run and synchronization.
-6. Add contact discovery adapters.
-7. Add resume draft generation and approval workflow.
-8. Add dashboard and monitoring.
+## Deployment
 
-## Security and compliance
-
-- Never commit API keys or tokens.
-- Use environment variables and local secret storage.
-- Respect provider terms, rate limits, and privacy requirements.
-- Store only publicly available professional information with source URLs.
+Docker Compose provides PostgreSQL, FastAPI, and Next.js. Windmill scripts stay outside the API process so scheduling and retry policy can evolve independently.
