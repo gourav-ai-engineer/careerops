@@ -3,8 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from app.candidate_fit import VERIFIABLE_JOB_STATUSES
-from app.models import Contact, Job, JobContact
+from app.models import Contact, Job
 from app.smartsheet_sync import SmartsheetClient
 
 
@@ -64,7 +63,9 @@ def _row_key(values: dict[int, Any]) -> tuple[str, str, str]:
     )
 
 
-def _index_rows(sheet: dict[str, Any]) -> tuple[
+def _index_rows(
+    sheet: dict[str, Any],
+) -> tuple[
     dict[tuple[str, str, str], dict[str, Any]],
     dict[tuple[str, str], list[dict[str, Any]]],
 ]:
@@ -114,7 +115,11 @@ def _contact_summary(contacts: list[Contact]) -> tuple[str, str, str]:
             + (f" ({contact.verification_confidence})" if contact.verification_confidence else "")
         )
 
-    return " | ".join(descriptions), " | ".join(dict.fromkeys(linkedin)), " | ".join(verification)
+    return (
+        " | ".join(descriptions),
+        " | ".join(dict.fromkeys(linkedin)),
+        " | ".join(verification),
+    )
 
 
 def build_contact_sync_plan(
@@ -125,7 +130,9 @@ def build_contact_sync_plan(
     operations: list[ContactSyncOperation] = []
 
     for job in jobs:
-        contact_text, linkedin_text, verification_text = _contact_summary(job.contacts)
+        contacts = [link.contact for link in job.contacts if link.contact is not None]
+        contact_text, linkedin_text, verification_text = _contact_summary(contacts)
+
         if not contact_text:
             operations.append(
                 ContactSyncOperation(
@@ -155,19 +162,20 @@ def build_contact_sync_plan(
             )
             continue
 
-        desired = (
+        desired: list[dict[str, Any]] = [
             {"columnId": JOB_CONTACT_COLUMNS.recruiter_contact, "value": contact_text},
-            *(
-                (
-                    {"columnId": JOB_CONTACT_COLUMNS.recruiter_linkedin, "value": linkedin_text},
-                )
-                if linkedin_text
-                else ()
-            ),
             {"columnId": JOB_CONTACT_COLUMNS.recruiter_verification, "value": verification_text},
-        )
+        ]
+        if linkedin_text:
+            desired.insert(
+                1,
+                {"columnId": JOB_CONTACT_COLUMNS.recruiter_linkedin, "value": linkedin_text},
+            )
+
         existing = _row_values(row)
-        changed = any(existing.get(cell["columnId"]) != cell["value"] for cell in desired)
+        changed = any(
+            existing.get(cell["columnId"]) != cell["value"] for cell in desired
+        )
 
         if changed:
             operations.append(
@@ -183,7 +191,10 @@ def build_contact_sync_plan(
     return ContactSyncPlan(sheet_id=sheet["id"], operations=tuple(operations))
 
 
-def apply_contact_sync_plan(client: SmartsheetClient, plan: ContactSyncPlan) -> dict[str, int]:
+def apply_contact_sync_plan(
+    client: SmartsheetClient,
+    plan: ContactSyncPlan,
+) -> dict[str, int]:
     updates = [
         {"id": op.row_id, "cells": list(op.cells)}
         for op in plan.operations
@@ -191,8 +202,10 @@ def apply_contact_sync_plan(client: SmartsheetClient, plan: ContactSyncPlan) -> 
     ]
     if updates:
         client.update_rows(plan.sheet_id, updates)
+
+    unchanged = sum(op.action == "unchanged" for op in plan.operations)
     return {
         "updated": len(updates),
         "skipped": sum(op.action == "skip" for op in plan.operations),
-        "unchanged": 0,
+        "unchanged": unchanged,
     }
