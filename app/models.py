@@ -127,6 +127,7 @@ class Contact(Base):
     phone: Mapped[str | None] = mapped_column(String(40))
     phone_type: Mapped[str | None] = mapped_column(String(50))
     contact_type: Mapped[str | None] = mapped_column(String(100))
+    linkedin_url: Mapped[str | None] = mapped_column(Text)
     source_url: Mapped[str | None] = mapped_column(Text)
     verification_status: Mapped[str | None] = mapped_column(String(50))
     verification_confidence: Mapped[str | None] = mapped_column(String(20))
