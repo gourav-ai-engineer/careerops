@@ -34,7 +34,14 @@ class Job(Base):
     last_checked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     company: Mapped[Company] = relationship(back_populates="jobs")
     contacts: Mapped[list["JobContact"]] = relationship(back_populates="job")
-    source_evidence: Mapped[list["JobSourceEvidence"]] = relationship(back_populates="job", cascade="all, delete-orphan")
+    source_evidence: Mapped[list["JobSourceEvidence"]] = relationship(
+        back_populates="job", cascade="all, delete-orphan"
+    )
+    status_history: Mapped[list["JobStatusHistory"]] = relationship(
+        back_populates="job",
+        cascade="all, delete-orphan",
+        order_by="JobStatusHistory.changed_at.desc()",
+    )
 
 
 class JobSourceEvidence(Base):
@@ -47,6 +54,17 @@ class JobSourceEvidence(Base):
     verification_reason: Mapped[str] = mapped_column(Text, nullable=False)
     checked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     job: Mapped[Job] = relationship(back_populates="source_evidence")
+
+
+class JobStatusHistory(Base):
+    __tablename__ = "job_status_history"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id"), nullable=False, index=True)
+    from_status: Mapped[str | None] = mapped_column(String(50))
+    to_status: Mapped[str] = mapped_column(String(50), nullable=False)
+    reason: Mapped[str | None] = mapped_column(Text)
+    changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    job: Mapped[Job] = relationship(back_populates="status_history")
 
 
 class CandidateProfileRecord(Base):
@@ -78,7 +96,7 @@ class Contact(Base):
     verification_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     priority: Mapped[str | None] = mapped_column(String(10))
     company: Mapped[Company] = relationship(back_populates="contacts")
-    jobs: Mapped[list["JobContact"]] = relationship(back_populates="contact")
+    jobs: Mapped[list["JobContact"]] = relationship(back_populates="jobs")
 
 
 class JobContact(Base):
