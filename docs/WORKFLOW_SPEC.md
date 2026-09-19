@@ -14,8 +14,20 @@
 10. Persist a transparent fit assessment in PostgreSQL.
 11. Discover legitimate public professional contacts through replaceable provider adapters.
 12. Persist contact source evidence, provider, verification state, and confidence.
-13. Produce a dry-run Smartsheet change preview.
-14. Synchronize only approved and verified records.
+13. Build a dry-run Smartsheet synchronization plan.
+14. Synchronize only verified and later-stage jobs after preview review.
+15. Keep PostgreSQL as the system of record and Smartsheet as an operational view.
+
+### Smartsheet synchronization rules
+
+- Sync is explicitly split into dry-run planning and apply operations.
+- The current job tracker mapping targets Company, Role, Location, Eligibility, Fit Score, Application Status, Apply Link, Source, and Last Checked.
+- Existing rows are matched by normalized company + role + application link; when the application link is blank on one side, a unique company + role fallback is allowed.
+- Only changed cells are sent in update operations.
+- New rows are appended to the bottom of the target sheet.
+- Jobs in pre-verification states are excluded from synchronization.
+- No delete operation is performed by the sync engine.
+- Credentials are read from environment configuration and never stored in source control.
 
 ### Verification rules
 
