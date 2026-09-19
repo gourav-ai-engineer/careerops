@@ -5,15 +5,37 @@ CareerOps is a safety-first career intelligence pipeline for India-based AI/ML, 
 ## Current capabilities
 
 - FastAPI service with a health endpoint.
-- PostgreSQL/SQLAlchemy foundation for companies, jobs, contacts, job-contact relationships, requirements, fit assessments, and status history.
+- PostgreSQL/SQLAlchemy foundation for companies, jobs, job-contact relationships, requirements, fit assessments, contact evidence, and status history.
 - Job ingestion, deterministic deduplication, search, pagination, detail retrieval, and status lifecycle.
 - Conservative official-source screening with persisted job-source evidence.
 - Explicit verification decisions with an auditable status history.
 - Extracted job requirements persisted for downstream matching.
 - Candidate-profile validation and deterministic profile-based fit assessment.
 - Persistent fit assessments that can be recalculated idempotently.
-- Provider-independent contact discovery adapters and contact evidence records.
+- Provider-independent public contact discovery adapters and contact evidence records.
 - Smartsheet dry-run planning and idempotent job synchronization for verified/later-stage jobs.
+- Smartsheet contact synchronization for linked, source-checked/verified public professional contacts.
+
+## Smartsheet synchronization
+
+The existing AI & SDE job tracker uses Company, Role, Location, Eligibility, Fit Score, Application Status, Apply Link, Source, Last Checked, Recruiter / Contact, Recruiter LinkedIn, and Recruiter Verification.
+
+Job endpoints:
+
+    POST /sync/smartsheet/dry-run
+    POST /sync/smartsheet/apply
+
+Contact endpoints:
+
+    POST /sync/smartsheet/contacts/dry-run
+    POST /sync/smartsheet/contacts/apply
+
+Contact synchronization updates existing job rows only. It does not invent LinkedIn URLs or contact data. Only contact records with source_checked or verified status are synchronized.
+
+Local configuration:
+
+    SMARTSHEET_ACCESS_TOKEN=<local-secret>
+    SMARTSHEET_JOBS_SHEET_ID=3084190078947204
 
 ## Job verification
 
@@ -27,19 +49,13 @@ For verified and later-stage jobs, CareerOps can compare persisted job requireme
 
 Contact discovery uses a provider adapter contract so future services can be added without rewriting the persistence layer. The current provider reads public business contact details only from HTTPS pages on the supplied employer domain or subdomains.
 
-## Smartsheet synchronization
+## Database setup
 
-The connected AI & SDE job tracker uses the existing Company, Role, Location, Eligibility, Fit Score, Application Status, Apply Link, Source, and Last Checked columns. CareerOps builds a dry-run plan first, detects adds/updates by normalized company + role + application link, and applies only changed verified/later-stage jobs.
+For existing databases after the recruiter LinkedIn field was added, run:
 
-Endpoints:
+    .\.venv\Scripts\python.exe -m app.init_db
 
-    POST /sync/smartsheet/dry-run
-    POST /sync/smartsheet/apply
-
-Set the credentials locally:
-
-    SMARTSHEET_ACCESS_TOKEN=<local-secret>
-    SMARTSHEET_JOBS_SHEET_ID=3084190078947204
+This creates missing tables and applies the contact LinkedIn column migration.
 
 ## Run locally
 
@@ -54,6 +70,6 @@ CareerOps only accepts legitimately published professional contact information, 
 ## Planned next steps
 
 1. Add additional compliant contact-provider adapters with explicit credentials and rate limits.
-2. Add Smartsheet contact synchronization and dry-run previews.
-3. Add scheduled discovery and monitoring.
-4. Add dashboard views for verification, fit, contacts, and application progress.
+2. Add scheduled discovery and monitoring.
+3. Add dashboard views for verification, fit, contacts, and application progress.
+4. Add stronger migration management with Alembic.
