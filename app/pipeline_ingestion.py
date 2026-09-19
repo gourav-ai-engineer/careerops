@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 
 from sqlalchemy import select
@@ -8,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.job_deduplication import compare_jobs
 from app.job_extraction import ExtractedJob, extract_jobs
 from app.job_intake import upsert_job
-from app.models import Company, Job
+from app.models import Company, Job, JobRequirement
 
 
 @dataclass(frozen=True)
@@ -20,6 +21,19 @@ class PipelineItem:
     reason: str
 
 
+def _upsert_requirements(db: Session, job_id: int, item: ExtractedJob) -> None:
+    if not item.required_skills:
+        return
+    requirement = db.scalar(select(JobRequirement).where(JobRequirement.job_id == job_id))
+    if requirement is None:
+        requirement = JobRequirement(job_id=job_id)
+        db.add(requirement)
+    requirement.required_skills = json.dumps(item.required_skills)
+    requirement.extraction_method = item.extraction_method
+    requirement.confidence = f"{item.confidence:.2f}"
+    db.commit()
+
+
 def process_text(db: Session, text: str) -> list[PipelineItem]:
     extraction = extract_jobs(text)
     results: list[PipelineItem] = []
@@ -27,7 +41,9 @@ def process_text(db: Session, text: str) -> list[PipelineItem]:
     for item in extraction.jobs:
         existing = list(
             db.scalars(
-                select(Job).join(Company).where(Company.normalized_name == item.company_name.strip().lower())
+                select(Job).join(Company).where(
+                    Company.normalized_name == item.company_name.strip().lower()
+                )
             )
         )
         duplicate = False
@@ -40,13 +56,15 @@ def process_text(db: Session, text: str) -> list[PipelineItem]:
             )
             if decision.is_duplicate:
                 duplicate, confidence, reason = True, decision.confidence, decision.reason
+                if item.required_skills:
+                    _upsert_requirements(db, job.id, item)
                 break
 
         if duplicate:
             results.append(PipelineItem(item, False, True, confidence, reason))
             continue
 
-        upsert_job(
+        intake = upsert_job(
             db,
             company_name=item.company_name,
             company_domain=None,
@@ -58,6 +76,7 @@ def process_text(db: Session, text: str) -> list[PipelineItem]:
             eligibility=item.eligibility,
             priority=None,
         )
+        _upsert_requirements(db, intake.job.id, item)
         results.append(PipelineItem(item, True, False, confidence, "Persisted new job"))
 
     return results
