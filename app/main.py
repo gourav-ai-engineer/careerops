@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 
+from app.candidate_profile_routes import router as candidate_profile_router
 from app.contact_routes import router as contact_router
 from app.ingestion_routes import router as ingestion_router
 from app.job_routes import router as job_router
@@ -7,10 +8,11 @@ from app.job_verification_routes import router as job_verification_router
 
 app = FastAPI(
     title="CareerOps",
-    version="0.5.0",
+    version="0.6.0",
     description="Job and recruiter intelligence pipeline.",
 )
 
+app.include_router(candidate_profile_router)
 app.include_router(contact_router)
 app.include_router(ingestion_router)
 app.include_router(job_router)
