@@ -10,9 +10,9 @@ from app.candidate_profile_store import CandidateProfileStore
 from app.contact_discovery_orchestrator import discover_and_persist_contacts
 from app.job_status import change_job_status
 from app.job_verification import verify_job_source
-from app.models import Job, JobFitAssessment, JobSourceEvidence, JobStatusHistory
+from app.models import Job, JobFitAssessment, JobSourceEvidence
 from app.official_verification import verify_official_domain
-from app.pipeline_ingestion import PipelineItem, process_text
+from app.pipeline_ingestion import process_text
 from app.resume_engine import create_resume_draft, get_master_resume
 from app.run_service import finish_run, start_run
 from app.smartsheet_sync import SmartsheetClient, build_job_sync_plan
@@ -108,7 +108,6 @@ async def run_career_pipeline(
 
     try:
         extraction = process_text(db, text)
-        warnings.extend([])
 
         profile_store = CandidateProfileStore()
         profile = profile_store.load(db)
