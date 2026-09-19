@@ -16,11 +16,35 @@ Open:
 
 ## Run the complete pipeline with text
 
-Example:
+### Recommended on Windows PowerShell
 
-    curl -X POST http://localhost:8000/pipeline/run ^
-      -H "Content-Type: application/json" ^
-      -d "{"text":"Example | Software Engineer | Remote | https://example.com/jobs/123"}"
+Run this from a **PowerShell** prompt (it starts with `PS C:\...>`):
+
+    $body = @{
+        text = 'Example | Software Engineer | Remote | https://example.com/jobs/123'
+    } | ConvertTo-Json
+
+    Invoke-RestMethod `
+      -Uri 'http://localhost:8000/pipeline/run' `
+      -Method Post `
+      -ContentType 'application/json' `
+      -Body $body
+
+This avoids Windows CMD quoting problems with JSON and `|` characters.
+
+### Easiest alternative: Swagger
+
+Open http://localhost:8000/docs, expand:
+
+    POST /pipeline/run
+
+Choose **Try it out**, enter:
+
+    {
+      "text": "Example | Software Engineer | Remote | https://example.com/jobs/123"
+    }
+
+Then execute the request.
 
 The response reports every stage. A newly discovered job stops at the explicit verification gate.
 
