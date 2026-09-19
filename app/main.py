@@ -8,7 +8,7 @@ from app.job_verification_routes import router as job_verification_router
 
 app = FastAPI(
     title="CareerOps",
-    version="0.8.0",
+    version="0.9.0",
     description="Job and recruiter intelligence pipeline.",
 )
 
