@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, HttpUrl
@@ -10,6 +11,8 @@ from app.job_verification import verify_job_source
 from app.models import Job, JobSourceEvidence
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
+VerificationStatus = Literal["screened", "needs_review", "verified", "rejected"]
+SourceType = Literal["application", "source", "official_career_page"]
 
 
 class JobVerificationRequest(BaseModel):
@@ -24,8 +27,8 @@ class JobVerificationResponse(BaseModel):
 
 class SourceEvidenceRequest(BaseModel):
     source_url: HttpUrl
-    source_type: str = "source"
-    verification_status: str | None = None
+    source_type: SourceType = "source"
+    verification_status: VerificationStatus | None = None
     verification_reason: str | None = None
 
 
@@ -58,11 +61,10 @@ def add_source_evidence(
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    company = job.company
     screened = verify_job_source(
         str(payload.source_url),
         str(payload.source_url),
-        company.domain if company else None,
+        job.company.domain if job.company else None,
     )
     status = payload.verification_status or screened.status
     reason = payload.verification_reason or screened.reason
@@ -78,3 +80,20 @@ def add_source_evidence(
     db.commit()
     db.refresh(evidence)
     return evidence
+
+
+@router.get("/{job_id}/source-evidence", response_model=list[SourceEvidenceResponse])
+def list_source_evidence(
+    job_id: int,
+    db: Session = Depends(get_db),
+) -> list[JobSourceEvidence]:
+    job = db.scalar(select(Job).where(Job.id == job_id))
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return list(
+        db.scalars(
+            select(JobSourceEvidence)
+            .where(JobSourceEvidence.job_id == job_id)
+            .order_by(JobSourceEvidence.checked_at.desc())
+        )
+    )
