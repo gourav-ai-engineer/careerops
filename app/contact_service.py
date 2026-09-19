@@ -33,6 +33,7 @@ def upsert_public_contact(
     phone: str | None,
     phone_type: str | None,
     contact_type: str | None,
+    linkedin_url: str | None,
     source_url: str,
     verification_status: str,
     verification_confidence: str | None,
@@ -58,12 +59,19 @@ def upsert_public_contact(
             select(Contact).where(Contact.normalized_email == normalized_email)
         )
 
+    if contact is None and phone:
+        contact = db.scalar(
+            select(Contact).where(
+                Contact.company_id == company.id,
+                Contact.phone == normalize_text(phone),
+                Contact.source_url == source_url,
+            )
+        )
+
+    created = contact is None
     if contact is None:
-        contact = Contact(company_id=company.id, normalized_email=normalized_email)
+        contact = Contact(company_id=company.id)
         db.add(contact)
-        created = True
-    else:
-        created = False
 
     contact.company_id = company.id
     contact.name = normalize_text(name)
@@ -73,6 +81,7 @@ def upsert_public_contact(
     contact.phone = normalize_text(phone)
     contact.phone_type = normalize_text(phone_type)
     contact.contact_type = normalize_text(contact_type)
+    contact.linkedin_url = normalize_text(linkedin_url)
     contact.source_url = source_url
     contact.verification_status = verification_status
     contact.verification_confidence = normalize_text(verification_confidence)
