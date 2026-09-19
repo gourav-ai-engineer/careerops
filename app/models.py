@@ -38,6 +38,21 @@ class Job(Base):
 
     company: Mapped[Company] = relationship(back_populates="jobs")
     contacts: Mapped[list["JobContact"]] = relationship(back_populates="job")
+    source_evidence: Mapped[list["JobSourceEvidence"]] = relationship(back_populates="job", cascade="all, delete-orphan")
+
+
+class JobSourceEvidence(Base):
+    __tablename__ = "job_source_evidence"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id"), nullable=False, index=True)
+    source_url: Mapped[str] = mapped_column(Text, nullable=False)
+    source_type: Mapped[str] = mapped_column(String(50), nullable=False, default="source")
+    verification_status: Mapped[str] = mapped_column(String(50), nullable=False, default="needs_review")
+    verification_reason: Mapped[str] = mapped_column(Text, nullable=False)
+    checked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    job: Mapped[Job] = relationship(back_populates="source_evidence")
 
 
 class Contact(Base):
