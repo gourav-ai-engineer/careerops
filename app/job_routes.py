@@ -1,17 +1,23 @@
 from datetime import datetime
+import json
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, HttpUrl
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from app.candidate_fit import (
+    VERIFIABLE_JOB_STATUSES,
+    assess_candidate_fit,
+    persist_fit_assessment,
+)
 from app.candidate_profile_store import CandidateProfileStore
 from app.database import get_db
 from app.job_fit import score_job_fit
 from app.job_intake import upsert_job
 from app.job_query import search_jobs
 from app.job_status import ALLOWED_STATUSES, change_job_status
-from app.models import Job
+from app.models import CandidateProfileRecord, Job, JobFitAssessment
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 profile_store = CandidateProfileStore()
@@ -130,6 +136,70 @@ class JobStatusUpdateResponse(BaseModel):
     changed_at: datetime | None
 
 
+class FitAssessmentResponse(BaseModel):
+    id: int
+    job_id: int
+    candidate_profile_id: int
+    score: int
+    matched_skills: list[str]
+    missing_skills: list[str]
+    role_match: bool | None
+    location_match: bool | None
+    eligibility_match: bool | None
+    explanation: str
+    evaluation_method: str
+    assessed_at: datetime | None
+
+
+class BulkFitAssessmentResponse(BaseModel):
+    assessed: int
+    skipped: int
+    items: list[FitAssessmentResponse]
+
+
+def _fit_response(result) -> JobFitResponse:
+    return JobFitResponse(
+        score=result.score,
+        matched_skills=result.matched_skills,
+        missing_skills=result.missing_skills,
+        eligibility_match=result.eligibility_match,
+        location_match=result.location_match,
+        explanation=result.explanation,
+    )
+
+
+def _assessment_response(assessment: JobFitAssessment) -> FitAssessmentResponse:
+    return FitAssessmentResponse(
+        id=assessment.id,
+        job_id=assessment.job_id,
+        candidate_profile_id=assessment.candidate_profile_id,
+        score=assessment.score,
+        matched_skills=json.loads(assessment.matched_skills),
+        missing_skills=json.loads(assessment.missing_skills),
+        role_match=assessment.role_match,
+        location_match=assessment.location_match,
+        eligibility_match=assessment.eligibility_match,
+        explanation=assessment.explanation,
+        evaluation_method=assessment.evaluation_method,
+        assessed_at=assessment.assessed_at,
+    )
+
+
+def _profile_record(db: Session) -> CandidateProfileRecord:
+    record = db.scalar(select(CandidateProfileRecord).where(CandidateProfileRecord.id == 1))
+    if record is None:
+        raise HTTPException(status_code=404, detail="Candidate profile not found")
+    return record
+
+
+def _assert_assessable(job: Job) -> None:
+    if job.status not in VERIFIABLE_JOB_STATUSES:
+        raise HTTPException(
+            status_code=409,
+            detail="Fit assessment requires a verified or later-stage job",
+        )
+
+
 @router.get("", response_model=JobListResponse)
 def list_jobs(company: str | None = None, title: str | None = None,
               status: str | None = None, role_family: str | None = None,
@@ -152,6 +222,82 @@ def list_jobs(company: str | None = None, title: str | None = None,
 @router.get("/statuses")
 def list_job_statuses() -> dict[str, list[str]]:
     return {"statuses": sorted(ALLOWED_STATUSES)}
+
+
+@router.get("/fit-assessments/verified", response_model=BulkFitAssessmentResponse)
+def list_saved_fit_assessments(
+    db: Session = Depends(get_db),
+) -> BulkFitAssessmentResponse:
+    assessments = list(
+        db.scalars(
+            select(JobFitAssessment)
+            .where(JobFitAssessment.candidate_profile_id == 1)
+            .order_by(JobFitAssessment.assessed_at.desc())
+        )
+    )
+    return BulkFitAssessmentResponse(
+        assessed=len(assessments),
+        skipped=0,
+        items=[_assessment_response(item) for item in assessments],
+    )
+
+
+@router.post("/fit-assessments/verified", response_model=BulkFitAssessmentResponse)
+def assess_verified_jobs(db: Session = Depends(get_db)) -> BulkFitAssessmentResponse:
+    _profile_record(db)
+    jobs = list(
+        db.scalars(
+            select(Job)
+            .options(selectinload(Job.requirements))
+            .where(Job.status.in_(VERIFIABLE_JOB_STATUSES))
+            .order_by(Job.first_seen_at.desc(), Job.id.desc())
+        )
+    )
+    items: list[FitAssessmentResponse] = []
+    for job in jobs:
+        result = assess_candidate_fit(
+            job,
+            profile_store.load(db),
+        )
+        profile_record = _profile_record(db)
+        assessment = persist_fit_assessment(db, job, profile_record, result)
+        items.append(_assessment_response(assessment))
+    return BulkFitAssessmentResponse(assessed=len(items), skipped=0, items=items)
+
+
+@router.post("/{job_id}/fit-assessment", response_model=FitAssessmentResponse)
+def assess_job_fit(job_id: int, db: Session = Depends(get_db)) -> FitAssessmentResponse:
+    job = db.scalar(
+        select(Job)
+        .options(selectinload(Job.requirements))
+        .where(Job.id == job_id)
+    )
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    _assert_assessable(job)
+    profile_record = _profile_record(db)
+    profile = profile_store.load(db)
+    if profile is None:
+        raise HTTPException(status_code=404, detail="Candidate profile not found")
+
+    result = assess_candidate_fit(job, profile)
+    assessment = persist_fit_assessment(db, job, profile_record, result)
+    return _assessment_response(assessment)
+
+
+@router.get("/{job_id}/fit-assessment", response_model=FitAssessmentResponse)
+def get_job_fit_assessment(job_id: int, db: Session = Depends(get_db)) -> FitAssessmentResponse:
+    assessment = db.scalar(
+        select(JobFitAssessment)
+        .where(
+            JobFitAssessment.job_id == job_id,
+            JobFitAssessment.candidate_profile_id == 1,
+        )
+        .order_by(JobFitAssessment.assessed_at.desc())
+    )
+    if assessment is None:
+        raise HTTPException(status_code=404, detail="Fit assessment not found")
+    return _assessment_response(assessment)
 
 
 @router.get("/{job_id}", response_model=JobDetailResponse)
@@ -234,12 +380,6 @@ def intake_job(payload: JobIntakeRequest, db: Session = Depends(get_db)) -> JobI
                         eligibility=payload.eligibility, priority=payload.priority)
     return JobIntakeResponse(id=result.job.id, company_id=result.job.company_id, created=result.created,
                              fingerprint=result.fingerprint, status=result.job.status)
-
-
-def _fit_response(result) -> JobFitResponse:
-    return JobFitResponse(score=result.score, matched_skills=result.matched_skills,
-                          missing_skills=result.missing_skills, eligibility_match=result.eligibility_match,
-                          location_match=result.location_match, explanation=result.explanation)
 
 
 @router.post("/fit-score", response_model=JobFitResponse)
