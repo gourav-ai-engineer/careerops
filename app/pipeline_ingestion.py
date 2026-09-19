@@ -15,6 +15,7 @@ from app.models import Company, Job, JobRequirement
 @dataclass(frozen=True)
 class PipelineItem:
     extracted: ExtractedJob
+    job_id: int
     persisted: bool
     duplicate: bool
     duplicate_confidence: float
@@ -58,10 +59,10 @@ def process_text(db: Session, text: str) -> list[PipelineItem]:
                 duplicate, confidence, reason = True, decision.confidence, decision.reason
                 if item.required_skills:
                     _upsert_requirements(db, job.id, item)
+                results.append(PipelineItem(item, job.id, False, True, confidence, reason))
                 break
 
         if duplicate:
-            results.append(PipelineItem(item, False, True, confidence, reason))
             continue
 
         intake = upsert_job(
@@ -77,6 +78,6 @@ def process_text(db: Session, text: str) -> list[PipelineItem]:
             priority=None,
         )
         _upsert_requirements(db, intake.job.id, item)
-        results.append(PipelineItem(item, True, False, confidence, "Persisted new job"))
+        results.append(PipelineItem(item, intake.job.id, True, False, confidence, "Persisted new job"))
 
     return results
