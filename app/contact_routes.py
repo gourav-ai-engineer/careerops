@@ -1,6 +1,7 @@
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel, Field, HttpUrl
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.contact_discovery import (
@@ -8,8 +9,11 @@ from app.contact_discovery import (
     normalize_phone,
     validate_public_contact,
 )
+from app.contact_discovery_orchestrator import discover_and_persist_contacts
 from app.contact_service import upsert_public_contact
+from app.contact_providers import ContactProviderRegistry
 from app.database import get_db
+from app.models import Job
 from app.public_contact_discovery import PublicPhoneCandidate, discover_public_phones
 
 router = APIRouter(prefix="/contacts", tags=["contacts"])
@@ -53,6 +57,33 @@ class PublicPhoneDiscoveryRequest(BaseModel):
 
 class PublicPhoneDiscoveryResponse(BaseModel):
     candidates: list[PublicPhoneCandidate]
+
+
+class ContactDiscoveryRequest(BaseModel):
+    company_name: str = Field(min_length=1, max_length=255)
+    company_domain: str = Field(min_length=1, max_length=255)
+    source_urls: list[HttpUrl] = Field(min_length=1, max_length=20)
+    role_keywords: list[str] = Field(default_factory=list)
+    job_id: int | None = Field(default=None, ge=1)
+
+
+class DiscoveredContactResponse(BaseModel):
+    id: int
+    company_id: int
+    provider: str
+    created: bool
+    phone: str | None
+    phone_type: str | None
+    source_url: str
+    verification_status: str | None
+    verification_confidence: str | None
+
+
+class ContactDiscoveryResponse(BaseModel):
+    providers: list[str]
+    discovered: int
+    created: int
+    items: list[DiscoveredContactResponse]
 
 
 @router.post("/validate", response_model=ContactValidationResponse)
@@ -127,3 +158,54 @@ async def discover_public_contact_phones(
     except (ValueError, httpx.HTTPError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return PublicPhoneDiscoveryResponse(candidates=candidates)
+
+
+@router.post("/discover", response_model=ContactDiscoveryResponse)
+async def discover_contacts(
+    payload: ContactDiscoveryRequest,
+    db: Session = Depends(get_db),
+) -> ContactDiscoveryResponse:
+    job = None
+    if payload.job_id is not None:
+        job = db.scalar(select(Job).where(Job.id == payload.job_id))
+        if job is None:
+            raise HTTPException(status_code=404, detail="Job not found")
+        if job.company.domain and job.company.domain.lower() != payload.company_domain.lower().removeprefix("www."):
+            raise HTTPException(
+                status_code=409,
+                detail="Discovery domain does not match the job's stored company domain",
+            )
+
+    registry = ContactProviderRegistry()
+    try:
+        items = await discover_and_persist_contacts(
+            db,
+            company_name=payload.company_name,
+            company_domain=payload.company_domain,
+            source_urls=[str(url) for url in payload.source_urls],
+            role_keywords=payload.role_keywords,
+            registry=registry,
+            job=job,
+        )
+    except (ValueError, httpx.HTTPError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    return ContactDiscoveryResponse(
+        providers=[provider.name for provider in registry.providers()],
+        discovered=len(items),
+        created=sum(item.created for item in items),
+        items=[
+            DiscoveredContactResponse(
+                id=item.contact.id,
+                company_id=item.contact.company_id,
+                provider=item.provider,
+                created=item.created,
+                phone=item.contact.phone,
+                phone_type=item.contact.phone_type,
+                source_url=item.contact.source_url or "",
+                verification_status=item.contact.verification_status,
+                verification_confidence=item.contact.verification_confidence,
+            )
+            for item in items
+        ],
+    )
