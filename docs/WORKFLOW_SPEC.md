@@ -9,18 +9,30 @@
 5. Run conservative official-source screening.
 6. Persist the source evidence and screening result.
 7. Require an explicit verification decision before marking a job verified or rejected.
-8. Evaluate eligibility and role fit with transparent evidence.
-9. Persist the job, source evidence, and processing run.
-10. Produce a dry-run Smartsheet change preview.
-11. Synchronize only approved and verified records.
+8. Persist extracted job requirements, including required skills and extraction metadata.
+9. Evaluate eligibility, role fit, location fit, and skill fit against the candidate profile.
+10. Persist a transparent fit assessment in PostgreSQL.
+11. Produce a dry-run Smartsheet change preview.
+12. Synchronize only approved and verified records.
 
 ### Verification rules
 
-- A matching company domain or subdomain is **screened**, not automatically considered proof of ownership.
-- A `verified` decision is an explicit operator confirmation after official-domain screening.
-- A `rejected` decision is recorded as evidence and transitions the job through the status state machine.
+- A matching company domain or subdomain is screened, not automatically considered proof of ownership.
+- A verified decision is an explicit operator confirmation after official-domain screening.
+- A rejected decision is recorded as evidence and transitions the job through the status state machine.
 - Jobs without a usable application/source URL remain unverified and require review.
 - Verification evidence includes the source URL, evidence type, status, reason, and timestamp.
+
+### Candidate fit rules
+
+- Fit assessment is deterministic and explainable in rule_based_v1.
+- Skill coverage contributes up to 50 points.
+- Role-family match contributes up to 20 points.
+- Location match contributes up to 15 points.
+- Eligibility match contributes up to 15 points.
+- Unknown dimensions receive partial credit rather than being silently treated as mismatches.
+- Required skills come from the persisted job-requirements record when available.
+- Fit assessments are keyed by job and candidate profile so reruns update the same assessment instead of creating duplicates.
 
 ## Contact workflow
 
