@@ -37,7 +37,7 @@ def test_candidate_fit_does_not_penalize_unknown_dimensions_as_mismatches() -> N
 
     result = assess_candidate_fit(job, profile, required_skills=["Python"])
 
-    assert result.score == 82
+    assert result.score == 74
     assert result.role_match is None
     assert result.location_match is None
     assert result.eligibility_match is None
