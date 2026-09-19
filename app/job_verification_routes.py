@@ -58,7 +58,12 @@ def add_source_evidence(
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    screened = verify_job_source(str(payload.source_url), str(payload.source_url))
+    company = job.company
+    screened = verify_job_source(
+        str(payload.source_url),
+        str(payload.source_url),
+        company.domain if company else None,
+    )
     status = payload.verification_status or screened.status
     reason = payload.verification_reason or screened.reason
 
