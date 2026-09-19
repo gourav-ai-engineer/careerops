@@ -34,12 +34,9 @@ class Job(Base):
     last_checked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     company: Mapped[Company] = relationship(back_populates="jobs")
     contacts: Mapped[list["JobContact"]] = relationship(back_populates="job")
-    source_evidence: Mapped[list["JobSourceEvidence"]] = relationship(
-        back_populates="job", cascade="all, delete-orphan"
-    )
+    source_evidence: Mapped[list["JobSourceEvidence"]] = relationship(back_populates="job", cascade="all, delete-orphan")
     status_history: Mapped[list["JobStatusHistory"]] = relationship(
-        back_populates="job",
-        cascade="all, delete-orphan",
+        back_populates="job", cascade="all, delete-orphan",
         order_by="JobStatusHistory.changed_at.desc()",
     )
     requirements: Mapped["JobRequirement | None"] = relationship(
@@ -76,9 +73,7 @@ class JobStatusHistory(Base):
 class JobRequirement(Base):
     __tablename__ = "job_requirements"
     id: Mapped[int] = mapped_column(primary_key=True)
-    job_id: Mapped[int] = mapped_column(
-        ForeignKey("jobs.id"), nullable=False, unique=True, index=True
-    )
+    job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id"), nullable=False, unique=True, index=True)
     required_skills: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
     experience_keywords: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
     extraction_method: Mapped[str] = mapped_column(String(50), nullable=False, default="heuristic")
@@ -89,16 +84,10 @@ class JobRequirement(Base):
 
 class JobFitAssessment(Base):
     __tablename__ = "job_fit_assessments"
-    __table_args__ = (
-        UniqueConstraint(
-            "job_id", "candidate_profile_id", name="uq_job_fit_assessment_profile"
-        ),
-    )
+    __table_args__ = (UniqueConstraint("job_id", "candidate_profile_id", name="uq_job_fit_assessment_profile"),)
     id: Mapped[int] = mapped_column(primary_key=True)
     job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id"), nullable=False, index=True)
-    candidate_profile_id: Mapped[int] = mapped_column(
-        ForeignKey("candidate_profiles.id"), nullable=False, index=True
-    )
+    candidate_profile_id: Mapped[int] = mapped_column(ForeignKey("candidate_profiles.id"), nullable=False, index=True)
     score: Mapped[int] = mapped_column(nullable=False)
     matched_skills: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
     missing_skills: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
@@ -109,9 +98,7 @@ class JobFitAssessment(Base):
     evaluation_method: Mapped[str] = mapped_column(String(50), nullable=False, default="rule_based_v1")
     assessed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     job: Mapped[Job] = relationship(back_populates="fit_assessments")
-    candidate_profile: Mapped["CandidateProfileRecord"] = relationship(
-        back_populates="fit_assessments"
-    )
+    candidate_profile: Mapped["CandidateProfileRecord"] = relationship(back_populates="fit_assessments")
 
 
 class CandidateProfileRecord(Base):
@@ -147,6 +134,22 @@ class Contact(Base):
     priority: Mapped[str | None] = mapped_column(String(10))
     company: Mapped[Company] = relationship(back_populates="contacts")
     jobs: Mapped[list["JobContact"]] = relationship(back_populates="jobs")
+    evidence: Mapped[list["ContactEvidence"]] = relationship(
+        back_populates="contact", cascade="all, delete-orphan"
+    )
+
+
+class ContactEvidence(Base):
+    __tablename__ = "contact_evidence"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    contact_id: Mapped[int] = mapped_column(ForeignKey("contacts.id"), nullable=False, index=True)
+    provider: Mapped[str] = mapped_column(String(100), nullable=False)
+    source_url: Mapped[str] = mapped_column(Text, nullable=False)
+    verification_status: Mapped[str] = mapped_column(String(50), nullable=False)
+    confidence: Mapped[str | None] = mapped_column(String(20))
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    checked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    contact: Mapped[Contact] = relationship(back_populates="evidence")
 
 
 class JobContact(Base):
