@@ -1,5 +1,6 @@
 from app.database import Base, engine
 from app.migration_runner import apply_migrations
+from app import models  # noqa: F401 - register SQLAlchemy models before create_all
 
 
 def main() -> None:
