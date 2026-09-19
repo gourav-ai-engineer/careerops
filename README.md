@@ -12,8 +12,9 @@ CareerOps is a safety-first career intelligence pipeline for India-based AI/ML, 
 - Extracted job requirements persisted for downstream matching.
 - Candidate-profile validation and deterministic profile-based fit assessment.
 - Persistent fit assessments that can be recalculated idempotently.
-- Public contact validation helpers.
-- Professional phone metadata fields with explicit phone type, source, verification status, and confidence.
+- Provider-independent contact discovery adapters.
+- Public professional contact discovery from supplied HTTPS pages on the configured company domain.
+- Contact evidence records containing provider, source, verification state, confidence, and timestamp.
 
 ## Job verification
 
@@ -21,20 +22,25 @@ CareerOps distinguishes screening from verification. A company-domain match is e
 
 ## Candidate fit
 
-For verified and later-stage jobs, CareerOps can automatically compare the persisted job requirements with the saved candidate profile. The assessment records matched and missing skills, role-family match, location match, eligibility match, a 0–100 rule-based score, and a human-readable explanation.
+For verified and later-stage jobs, CareerOps can compare persisted job requirements with the saved candidate profile. The assessment records matched and missing skills, role-family match, location match, eligibility match, a 0–100 rule-based score, and a human-readable explanation.
 
-Endpoints:
+## Contact discovery
 
-GET   /jobs
-GET   /jobs/{job_id}
-PATCH /jobs/{job_id}/status
-POST  /jobs/{job_id}/verification
-POST  /jobs/{job_id}/fit-assessment
-GET   /jobs/{job_id}/fit-assessment
-POST  /jobs/fit-assessments/verified
-GET   /jobs/fit-assessments/verified
-POST  /jobs/{job_id}/source-evidence
-GET   /jobs/{job_id}/source-evidence
+Contact discovery uses a provider adapter contract so future services can be added without rewriting the persistence layer. The current provider is an official-website adapter that reads public business contact details only from HTTPS pages on the supplied employer domain or subdomains.
+
+Endpoint:
+
+POST /contacts/discover
+
+Example payload fields:
+
+- company_name
+- company_domain
+- source_urls
+- role_keywords
+- optional job_id
+
+The result includes the provider used, discovered contacts, source URL, phone type, verification state, and confidence.
 
 ## Run locally
 
@@ -49,7 +55,7 @@ CareerOps only accepts legitimately published professional contact information, 
 
 ## Planned next steps
 
-1. Add contact discovery adapters with evidence and provider metadata.
+1. Add additional compliant contact-provider adapters with explicit credentials and rate limits.
 2. Add Smartsheet dry-run and synchronization.
 3. Add scheduled discovery and monitoring.
 4. Add dashboard views for verification, fit, contacts, and application progress.
