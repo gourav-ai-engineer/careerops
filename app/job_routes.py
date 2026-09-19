@@ -1,13 +1,16 @@
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, HttpUrl
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.candidate_profile_store import CandidateProfileStore
 from app.database import get_db
 from app.job_fit import score_job_fit
 from app.job_intake import upsert_job
 from app.job_query import search_jobs
+from app.job_status import ALLOWED_STATUSES, change_job_status
 from app.models import Job
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
@@ -78,6 +81,55 @@ class JobListResponse(BaseModel):
     pages: int
 
 
+class JobEvidenceResponse(BaseModel):
+    id: int
+    source_url: str
+    source_type: str
+    verification_status: str
+    verification_reason: str
+    checked_at: datetime | None
+
+
+class JobStatusHistoryResponse(BaseModel):
+    id: int
+    from_status: str | None
+    to_status: str
+    reason: str | None
+    changed_at: datetime | None
+
+
+class JobDetailResponse(BaseModel):
+    id: int
+    company_id: int
+    company_name: str
+    company_domain: str | None
+    title: str
+    location: str | None
+    role_family: str | None
+    application_url: str | None
+    source_url: str | None
+    eligibility: str | None
+    priority: str | None
+    status: str
+    first_seen_at: datetime | None
+    last_checked_at: datetime | None
+    source_evidence: list[JobEvidenceResponse]
+    status_history: list[JobStatusHistoryResponse]
+
+
+class JobStatusUpdateRequest(BaseModel):
+    status: str = Field(min_length=1, max_length=50)
+    reason: str | None = Field(default=None, max_length=2000)
+
+
+class JobStatusUpdateResponse(BaseModel):
+    job_id: int
+    previous_status: str
+    status: str
+    reason: str | None
+    changed_at: datetime | None
+
+
 @router.get("", response_model=JobListResponse)
 def list_jobs(company: str | None = None, title: str | None = None,
               status: str | None = None, role_family: str | None = None,
@@ -95,6 +147,82 @@ def list_jobs(company: str | None = None, title: str | None = None,
     pages = (result.total + page_size - 1) // page_size if result.total else 0
     return JobListResponse(items=items, total=result.total, page=page,
                            page_size=page_size, pages=pages)
+
+
+@router.get("/statuses")
+def list_job_statuses() -> dict[str, list[str]]:
+    return {"statuses": sorted(ALLOWED_STATUSES)}
+
+
+@router.get("/{job_id}", response_model=JobDetailResponse)
+def get_job(job_id: int, db: Session = Depends(get_db)) -> JobDetailResponse:
+    job = db.scalar(
+        select(Job)
+        .options(selectinload(Job.source_evidence), selectinload(Job.status_history))
+        .where(Job.id == job_id)
+    )
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    return JobDetailResponse(
+        id=job.id,
+        company_id=job.company_id,
+        company_name=job.company.name,
+        company_domain=job.company.domain,
+        title=job.title,
+        location=job.location,
+        role_family=job.role_family,
+        application_url=job.application_url,
+        source_url=job.source_url,
+        eligibility=job.eligibility,
+        priority=job.priority,
+        status=job.status,
+        first_seen_at=job.first_seen_at,
+        last_checked_at=job.last_checked_at,
+        source_evidence=[
+            JobEvidenceResponse(
+                id=evidence.id,
+                source_url=evidence.source_url,
+                source_type=evidence.source_type,
+                verification_status=evidence.verification_status,
+                verification_reason=evidence.verification_reason,
+                checked_at=evidence.checked_at,
+            )
+            for evidence in job.source_evidence
+        ],
+        status_history=[
+            JobStatusHistoryResponse(
+                id=history.id,
+                from_status=history.from_status,
+                to_status=history.to_status,
+                reason=history.reason,
+                changed_at=history.changed_at,
+            )
+            for history in job.status_history
+        ],
+    )
+
+
+@router.patch("/{job_id}/status", response_model=JobStatusUpdateResponse)
+def update_job_status(job_id: int, payload: JobStatusUpdateRequest,
+                      db: Session = Depends(get_db)) -> JobStatusUpdateResponse:
+    job = db.scalar(select(Job).where(Job.id == job_id))
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    previous_status = job.status
+    try:
+        result = change_job_status(db, job, payload.status, payload.reason)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    return JobStatusUpdateResponse(
+        job_id=result.job.id,
+        previous_status=previous_status,
+        status=result.job.status,
+        reason=result.history.reason,
+        changed_at=result.history.changed_at,
+    )
 
 
 @router.post("/intake", response_model=JobIntakeResponse, status_code=201)
