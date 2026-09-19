@@ -40,6 +40,7 @@ class ContactUpsertRequest(ContactValidationRequest):
     company_domain: str | None = None
     email: str | None = None
     contact_type: str | None = None
+    linkedin_url: HttpUrl | None = None
     priority: str | None = None
 
 
@@ -133,6 +134,7 @@ def create_or_update_contact(
         phone=candidate.phone,
         phone_type=payload.phone_type,
         contact_type=payload.contact_type,
+        linkedin_url=str(payload.linkedin_url) if payload.linkedin_url else None,
         source_url=str(payload.source_url),
         verification_status=payload.verification_status,
         verification_confidence=payload.verification_confidence,
