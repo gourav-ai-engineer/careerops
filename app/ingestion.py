@@ -5,6 +5,10 @@ import io
 import re
 from dataclasses import dataclass
 
+from sqlalchemy.orm import Session
+
+from app.job_intake import upsert_job
+
 
 @dataclass(frozen=True)
 class IngestedJob:
@@ -51,7 +55,6 @@ def parse_whatsapp_export(content: str) -> list[IngestedJob]:
             continue
         urls = URL_RE.findall(line)
         text = URL_RE.sub("", line).strip(" -–—")
-        # Supported lightweight format: Company | Job Title | Location
         parts = [part.strip() for part in text.split("|")]
         if len(parts) < 2:
             continue
@@ -63,3 +66,19 @@ def parse_whatsapp_export(content: str) -> list[IngestedJob]:
                                 application_url=urls[0] if urls else None,
                                 raw_text=raw_line))
     return jobs
+
+
+def persist_jobs(db: Session, jobs: list[IngestedJob], source_url: str | None = None) -> dict[str, int]:
+    created = 0
+    updated = 0
+    for item in jobs:
+        result = upsert_job(db, company_name=item.company_name, company_domain=None,
+                            title=item.title, location=item.location, role_family=None,
+                            application_url=item.application_url,
+                            source_url=item.source_url or source_url,
+                            eligibility=None, priority=None)
+        if result.created:
+            created += 1
+        else:
+            updated += 1
+    return {"created": created, "updated": updated, "total": len(jobs)}
