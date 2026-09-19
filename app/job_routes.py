@@ -3,6 +3,7 @@ from pydantic import BaseModel, HttpUrl
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.job_fit import score_job_fit
 from app.job_intake import upsert_job
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
@@ -28,6 +29,22 @@ class JobIntakeResponse(BaseModel):
     status: str
 
 
+class JobFitRequest(BaseModel):
+    required_skills: list[str] = []
+    candidate_skills: list[str] = []
+    eligibility_match: bool | None = None
+    location_match: bool | None = None
+
+
+class JobFitResponse(BaseModel):
+    score: int
+    matched_skills: list[str]
+    missing_skills: list[str]
+    eligibility_match: bool | None
+    location_match: bool | None
+    explanation: str
+
+
 @router.post("/intake", response_model=JobIntakeResponse, status_code=201)
 def intake_job(payload: JobIntakeRequest, db: Session = Depends(get_db)) -> JobIntakeResponse:
     result = upsert_job(db, company_name=payload.company_name, company_domain=payload.company_domain,
@@ -37,3 +54,12 @@ def intake_job(payload: JobIntakeRequest, db: Session = Depends(get_db)) -> JobI
                         eligibility=payload.eligibility, priority=payload.priority)
     return JobIntakeResponse(id=result.job.id, company_id=result.job.company_id, created=result.created,
                              fingerprint=result.fingerprint, status=result.job.status)
+
+
+@router.post("/fit-score", response_model=JobFitResponse)
+def calculate_fit_score(payload: JobFitRequest) -> JobFitResponse:
+    result = score_job_fit(payload.required_skills, payload.candidate_skills,
+                           payload.eligibility_match, payload.location_match)
+    return JobFitResponse(score=result.score, matched_skills=result.matched_skills,
+                          missing_skills=result.missing_skills, eligibility_match=result.eligibility_match,
+                          location_match=result.location_match, explanation=result.explanation)
