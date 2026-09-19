@@ -16,6 +16,7 @@ from app.pipeline_ingestion import PipelineItem, process_text
 from app.resume_engine import create_resume_draft, get_master_resume
 from app.run_service import finish_run, start_run
 from app.smartsheet_sync import SmartsheetClient, build_job_sync_plan
+from app.settings import settings
 
 
 @dataclass
@@ -178,7 +179,7 @@ async def run_career_pipeline(
                 else:
                     try:
                         client = SmartsheetClient()
-                        sheet_id = client.access_sheet_id
+                        sheet_id = settings.smartsheet_jobs_sheet_id
                         if sheet_id is None:
                             raise ValueError("SMARTSHEET_JOBS_SHEET_ID is not configured")
                         sheet = client.get_sheet(sheet_id)
@@ -232,9 +233,4 @@ def select_profile_record(db: Session, name: str):
 
 
 def settings_ready_for_smartsheet() -> bool:
-    from app.settings import settings
     return bool(settings.smartsheet_access_token and settings.smartsheet_jobs_sheet_id)
-
-
-# Keep the client API honest: the generic client does not cache sheet configuration.
-SmartsheetClient.access_sheet_id = property(lambda self: __import__("app.settings", fromlist=["settings"]).settings.smartsheet_jobs_sheet_id)
