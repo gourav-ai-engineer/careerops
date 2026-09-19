@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.job_verification import verify_job_source
 from app.models import Job, JobSourceEvidence
+from app.official_verification import verify_official_domain
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 VerificationStatus = Literal["screened", "needs_review", "verified", "rejected"]
@@ -23,6 +24,18 @@ class JobVerificationRequest(BaseModel):
 class JobVerificationResponse(BaseModel):
     status: str
     reason: str
+
+
+class OfficialDomainRequest(BaseModel):
+    application_url: HttpUrl
+    company_domain: str
+
+
+class OfficialDomainResponse(BaseModel):
+    status: str
+    reason: str
+    candidate_host: str
+    company_host: str
 
 
 class SourceEvidenceRequest(BaseModel):
@@ -51,6 +64,13 @@ def verify_source(payload: JobVerificationRequest) -> JobVerificationResponse:
     return JobVerificationResponse(status=result.status, reason=result.reason)
 
 
+@router.post("/verify-official-domain", response_model=OfficialDomainResponse)
+def verify_official_domain_route(payload: OfficialDomainRequest) -> OfficialDomainResponse:
+    result = verify_official_domain(str(payload.application_url), payload.company_domain)
+    return OfficialDomainResponse(status=result.status, reason=result.reason,
+                                  candidate_host=result.candidate_host, company_host=result.company_host)
+
+
 @router.post("/{job_id}/source-evidence", response_model=SourceEvidenceResponse, status_code=201)
 def add_source_evidence(
     job_id: int,
@@ -61,21 +81,14 @@ def add_source_evidence(
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    screened = verify_job_source(
-        str(payload.source_url),
-        str(payload.source_url),
-        job.company.domain if job.company else None,
-    )
+    screened = verify_job_source(str(payload.source_url), str(payload.source_url),
+                                 job.company.domain if job.company else None)
     status = payload.verification_status or screened.status
     reason = payload.verification_reason or screened.reason
 
-    evidence = JobSourceEvidence(
-        job_id=job_id,
-        source_url=str(payload.source_url),
-        source_type=payload.source_type,
-        verification_status=status,
-        verification_reason=reason,
-    )
+    evidence = JobSourceEvidence(job_id=job_id, source_url=str(payload.source_url),
+                                 source_type=payload.source_type, verification_status=status,
+                                 verification_reason=reason)
     db.add(evidence)
     db.commit()
     db.refresh(evidence)
@@ -83,17 +96,9 @@ def add_source_evidence(
 
 
 @router.get("/{job_id}/source-evidence", response_model=list[SourceEvidenceResponse])
-def list_source_evidence(
-    job_id: int,
-    db: Session = Depends(get_db),
-) -> list[JobSourceEvidence]:
+def list_source_evidence(job_id: int, db: Session = Depends(get_db)) -> list[JobSourceEvidence]:
     job = db.scalar(select(Job).where(Job.id == job_id))
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
-    return list(
-        db.scalars(
-            select(JobSourceEvidence)
-            .where(JobSourceEvidence.job_id == job_id)
-            .order_by(JobSourceEvidence.checked_at.desc())
-        )
-    )
+    return list(db.scalars(select(JobSourceEvidence).where(JobSourceEvidence.job_id == job_id)
+                           .order_by(JobSourceEvidence.checked_at.desc())))
