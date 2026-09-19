@@ -7,13 +7,9 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.candidate_fit import VERIFIABLE_JOB_STATUSES
 from app.database import get_db
-from app.models import Job, JobFitAssessment
+from app.models import Job, JobContact, JobFitAssessment
 from app.settings import settings
-from app.smartsheet_contact_sync import (
-    ContactSyncOperation,
-    apply_contact_sync_plan,
-    build_contact_sync_plan,
-)
+from app.smartsheet_contact_sync import apply_contact_sync_plan, build_contact_sync_plan
 from app.smartsheet_sync import SmartsheetClient, apply_job_sync_plan, build_job_sync_plan
 
 router = APIRouter(prefix="/sync/smartsheet", tags=["smartsheet-sync"])
@@ -84,7 +80,7 @@ def _load_jobs_with_contacts(db: Session, job_ids: list[int]) -> list[Job]:
         select(Job)
         .options(
             selectinload(Job.company),
-            selectinload(Job.contacts).selectinload("contact"),
+            selectinload(Job.contacts).selectinload(JobContact.contact),
         )
         .where(Job.status.in_(VERIFIABLE_JOB_STATUSES))
     )
