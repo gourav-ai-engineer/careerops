@@ -1,4 +1,4 @@
-from app.models import Company, Contact, Job
+from app.models import Company, Contact, Job, JobContact
 from app.smartsheet_contact_sync import build_contact_sync_plan
 
 
@@ -25,8 +25,7 @@ def _job_with_contact() -> Job:
         application_url="https://example.com/jobs/1",
         status="verified",
     )
-    job.contacts = []
-    job.contacts.append(type("Link", (), {"contact": contact, "contact_id": contact.id})())
+    job.contacts = [JobContact(job_id=10, contact_id=20, contact=contact)]
     return job
 
 
@@ -48,13 +47,21 @@ def test_contact_sync_updates_existing_job_row() -> None:
     assert plan.operations[0].action == "update"
     assert plan.operations[0].row_id == 99
     assert 6946891809722244 in {cell["columnId"] for cell in plan.operations[0].cells}
+    assert 1317392275509124 in {cell["columnId"] for cell in plan.operations[0].cells}
+    assert 1865803764633476 in {cell["columnId"] for cell in plan.operations[0].cells}
 
 
 def test_contact_sync_skips_unverified_contacts() -> None:
     company = Company(id=1, name="Example", normalized_name="example", domain="example.com")
-    contact = Contact(id=20, company_id=1, company=company, name="Unknown", verification_status="unverified")
+    contact = Contact(
+        id=20,
+        company_id=1,
+        company=company,
+        name="Unknown",
+        verification_status="unverified",
+    )
     job = Job(id=10, company=company, company_id=1, title="AI Engineer", status="verified")
-    job.contacts = [type("Link", (), {"contact": contact, "contact_id": contact.id})()]
+    job.contacts = [JobContact(job_id=10, contact_id=20, contact=contact)]
     plan = build_contact_sync_plan([job], {"id": 123, "rows": []})
     assert plan.operations[0].action == "skip"
 
