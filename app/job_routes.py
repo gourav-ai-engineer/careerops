@@ -1,5 +1,6 @@
 from datetime import datetime
 import json
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, HttpUrl
@@ -134,6 +135,16 @@ class JobStatusUpdateResponse(BaseModel):
     status: str
     reason: str | None
     changed_at: datetime | None
+
+class CompanyDomainUpdateRequest(BaseModel):
+    company_domain: str = Field(min_length=3, max_length=255)
+
+
+class CompanyDomainUpdateResponse(BaseModel):
+    job_id: int
+    company_id: int
+    company_domain: str
+
 
 
 class FitAssessmentResponse(BaseModel):
@@ -347,6 +358,25 @@ def get_job(job_id: int, db: Session = Depends(get_db)) -> JobDetailResponse:
             for history in job.status_history
         ],
     )
+
+
+@router.patch("/{job_id}/company-domain", response_model=CompanyDomainUpdateResponse)
+def update_company_domain(
+    job_id: int,
+    payload: CompanyDomainUpdateRequest,
+    db: Session = Depends(get_db),
+) -> CompanyDomainUpdateResponse:
+    job = db.scalar(select(Job).options(selectinload(Job.company)).where(Job.id == job_id))
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    parsed = urlsplit(payload.company_domain if "://" in payload.company_domain else f"https://{payload.company_domain}")
+    host = (parsed.hostname or "").lower().strip(".")
+    if not host:
+        raise HTTPException(status_code=422, detail="company_domain must contain a valid hostname")
+    job.company.domain = host
+    db.commit()
+    db.refresh(job.company)
+    return CompanyDomainUpdateResponse(job_id=job.id, company_id=job.company_id, company_domain=host)
 
 
 @router.patch("/{job_id}/status", response_model=JobStatusUpdateResponse)
