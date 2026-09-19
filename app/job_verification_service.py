@@ -31,6 +31,9 @@ def verify_and_record(
         raise ValueError("Verification decision must be verified or rejected")
 
     candidate_url = job.application_url or job.source_url
+    if not candidate_url:
+        raise ValueError("Job has no application_url or source_url to verify")
+
     source_type = "application" if job.application_url else "source"
     screened = verify_job_source(candidate_url, candidate_url, job.company.domain)
     official = verify_official_domain(job.application_url, job.company.domain)
@@ -48,7 +51,7 @@ def verify_and_record(
 
     evidence = JobSourceEvidence(
         job_id=job.id,
-        source_url=candidate_url or "about:blank",
+        source_url=candidate_url,
         source_type=source_type,
         verification_status=decision,
         verification_reason=(
