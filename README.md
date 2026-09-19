@@ -6,9 +6,28 @@ CareerOps is a safety-first career intelligence pipeline for India-based AI/ML, 
 
 - FastAPI service with a health endpoint.
 - PostgreSQL/SQLAlchemy foundation for companies, jobs, contacts, and job-contact relationships.
+- Job ingestion, deterministic deduplication, search, pagination, detail retrieval, and status lifecycle.
+- Conservative official-source screening with persisted job-source evidence.
+- Explicit verification decisions that move jobs through the lifecycle with an auditable status history.
+- Candidate-profile validation and profile-based fit scoring.
 - Public contact validation helpers.
 - Professional phone metadata fields with explicit phone type, source, verification status, and confidence.
 - Validation endpoint: `POST /contacts/validate`.
+
+## Job verification
+
+CareerOps distinguishes **screening** from **verification**. A company-domain match is evidence that a URL is hosted on the stored employer domain or a subdomain; it is not proof of job ownership by itself. A job is marked `verified` only through an explicit verification decision, which is stored together with source evidence and status history.
+
+Useful endpoints:
+
+```
+GET   /jobs
+GET   /jobs/{job_id}
+PATCH /jobs/{job_id}/status
+POST  /jobs/{job_id}/verification
+POST  /jobs/{job_id}/source-evidence
+GET   /jobs/{job_id}/source-evidence
+```
 
 ## Run locally
 
@@ -25,6 +44,6 @@ CareerOps only accepts legitimately published professional contact information, 
 ## Planned next steps
 
 1. Add source adapters for official career pages and public company contact pages.
-2. Add deduplication and evidence records for every discovered contact.
-3. Add Smartsheet synchronization with dry-run previews.
+2. Add contact discovery adapters with evidence and provider metadata.
+3. Add Smartsheet dry-run and synchronization.
 4. Add scheduled discovery and monitoring.
