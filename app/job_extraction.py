@@ -27,7 +27,10 @@ class ExtractionResult:
 
 
 URL_RE = re.compile(r"https?://[^\s<>]+", re.IGNORECASE)
-SKILL_TERMS = ("python", "java", "c++", "sql", "pytorch", "tensorflow", "aws", "docker", "fastapi", "kubernetes", "react", "machine learning", "deep learning")
+SKILL_TERMS = (
+    "python", "java", "c++", "sql", "pytorch", "tensorflow", "aws",
+    "docker", "fastapi", "kubernetes", "react", "machine learning", "deep learning",
+)
 
 
 def _clean_url(value: str) -> str:
@@ -39,11 +42,28 @@ def _skills(text: str) -> list[str]:
     return [term for term in SKILL_TERMS if term in lowered]
 
 
+def _role_family(title: str) -> str | None:
+    value = title.casefold()
+    if any(term in value for term in ("machine learning", "ml engineer", "ai engineer", "genai", "llm", "deep learning")):
+        return "AI/ML"
+    if any(term in value for term in ("data scientist", "data science")):
+        return "Data Science"
+    if any(term in value for term in ("data engineer", "analytics engineer")):
+        return "Data Engineering"
+    if any(term in value for term in ("backend", "server-side")):
+        return "Backend"
+    if any(term in value for term in ("frontend", "front-end", "react")):
+        return "Frontend"
+    if any(term in value for term in ("software engineer", "sde", "developer")):
+        return "Software Engineering"
+    return None
+
+
 def extract_jobs(text: str) -> ExtractionResult:
     """Extract predictable job records without requiring an external LLM.
 
-    This is the safe baseline adapter; an LLM provider can later implement the same schema.
-    Expected line format: Company | Title | Location [URL].
+    Supported baseline format: Company | Title | Location [URL].
+    A second delimiter such as a WhatsApp export timestamp is not treated as a job.
     """
     jobs: list[ExtractedJob] = []
     warnings: list[str] = []
@@ -58,9 +78,25 @@ def extract_jobs(text: str) -> ExtractionResult:
             continue
         company, title = parts[0], parts[1]
         location = parts[2] if len(parts) > 2 and parts[2] else None
-        jobs.append(ExtractedJob(company_name=company, title=title, location=location,
-                                 application_url=urls[0] if urls else None,
-                                 required_skills=_skills(line), confidence=0.75))
+        application_url = urls[0] if urls else None
+        # The source evidence is the captured application/source URL. This is evidence only;
+        # it does not imply that the URL is an official employer source.
+        source_url = application_url
+        # Keep the import here so malformed URLs cannot break extraction.
+        if application_url:
+            _ = urlsplit(application_url).hostname
+        jobs.append(
+            ExtractedJob(
+                company_name=company,
+                title=title,
+                location=location,
+                application_url=application_url,
+                source_url=source_url,
+                role_family=_role_family(title),
+                required_skills=_skills(line),
+                confidence=0.75,
+            )
+        )
     if not jobs:
         warnings.append("No pipe-delimited job records were detected")
     return ExtractionResult(jobs=jobs, warnings=warnings)
