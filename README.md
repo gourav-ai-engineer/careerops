@@ -5,16 +5,15 @@ CareerOps is a safety-first career intelligence pipeline for India-based AI/ML, 
 ## Current capabilities
 
 - FastAPI service with a health endpoint.
-- PostgreSQL/SQLAlchemy foundation for companies, jobs, contacts, and job-contact relationships.
+- PostgreSQL/SQLAlchemy foundation for companies, jobs, contacts, job-contact relationships, requirements, fit assessments, and status history.
 - Job ingestion, deterministic deduplication, search, pagination, detail retrieval, and status lifecycle.
 - Conservative official-source screening with persisted job-source evidence.
-- Explicit verification decisions that move jobs through the lifecycle with an auditable status history.
+- Explicit verification decisions with an auditable status history.
 - Extracted job requirements persisted for downstream matching.
 - Candidate-profile validation and deterministic profile-based fit assessment.
 - Persistent fit assessments that can be recalculated idempotently.
-- Provider-independent contact discovery adapters.
-- Public professional contact discovery from supplied HTTPS pages on the configured company domain.
-- Contact evidence records containing provider, source, verification state, confidence, and timestamp.
+- Provider-independent contact discovery adapters and contact evidence records.
+- Smartsheet dry-run planning and idempotent job synchronization for verified/later-stage jobs.
 
 ## Job verification
 
@@ -26,26 +25,25 @@ For verified and later-stage jobs, CareerOps can compare persisted job requireme
 
 ## Contact discovery
 
-Contact discovery uses a provider adapter contract so future services can be added without rewriting the persistence layer. The current provider is an official-website adapter that reads public business contact details only from HTTPS pages on the supplied employer domain or subdomains.
+Contact discovery uses a provider adapter contract so future services can be added without rewriting the persistence layer. The current provider reads public business contact details only from HTTPS pages on the supplied employer domain or subdomains.
 
-Endpoint:
+## Smartsheet synchronization
 
-POST /contacts/discover
+The connected AI & SDE job tracker uses the existing Company, Role, Location, Eligibility, Fit Score, Application Status, Apply Link, Source, and Last Checked columns. CareerOps builds a dry-run plan first, detects adds/updates by normalized company + role + application link, and applies only changed verified/later-stage jobs.
 
-Example payload fields:
+Endpoints:
 
-- company_name
-- company_domain
-- source_urls
-- role_keywords
-- optional job_id
+    POST /sync/smartsheet/dry-run
+    POST /sync/smartsheet/apply
 
-The result includes the provider used, discovered contacts, source URL, phone type, verification state, and confidence.
+Set the credentials locally:
+
+    SMARTSHEET_ACCESS_TOKEN=<local-secret>
+    SMARTSHEET_JOBS_SHEET_ID=3084190078947204
 
 ## Run locally
 
-powershell
-.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload
+    .\.venv\Scripts\python.exe -m uvicorn app.main:app --reload
 
 Open the interactive API documentation at http://127.0.0.1:8000/docs.
 
@@ -56,6 +54,6 @@ CareerOps only accepts legitimately published professional contact information, 
 ## Planned next steps
 
 1. Add additional compliant contact-provider adapters with explicit credentials and rate limits.
-2. Add Smartsheet dry-run and synchronization.
+2. Add Smartsheet contact synchronization and dry-run previews.
 3. Add scheduled discovery and monitoring.
 4. Add dashboard views for verification, fit, contacts, and application progress.
