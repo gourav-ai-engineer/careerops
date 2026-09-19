@@ -42,6 +42,12 @@ class Job(Base):
         cascade="all, delete-orphan",
         order_by="JobStatusHistory.changed_at.desc()",
     )
+    requirements: Mapped["JobRequirement | None"] = relationship(
+        back_populates="job", cascade="all, delete-orphan", uselist=False
+    )
+    fit_assessments: Mapped[list["JobFitAssessment"]] = relationship(
+        back_populates="job", cascade="all, delete-orphan"
+    )
 
 
 class JobSourceEvidence(Base):
@@ -67,6 +73,47 @@ class JobStatusHistory(Base):
     job: Mapped[Job] = relationship(back_populates="status_history")
 
 
+class JobRequirement(Base):
+    __tablename__ = "job_requirements"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    job_id: Mapped[int] = mapped_column(
+        ForeignKey("jobs.id"), nullable=False, unique=True, index=True
+    )
+    required_skills: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    experience_keywords: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    extraction_method: Mapped[str] = mapped_column(String(50), nullable=False, default="heuristic")
+    confidence: Mapped[str | None] = mapped_column(String(20))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    job: Mapped[Job] = relationship(back_populates="requirements")
+
+
+class JobFitAssessment(Base):
+    __tablename__ = "job_fit_assessments"
+    __table_args__ = (
+        UniqueConstraint(
+            "job_id", "candidate_profile_id", name="uq_job_fit_assessment_profile"
+        ),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id"), nullable=False, index=True)
+    candidate_profile_id: Mapped[int] = mapped_column(
+        ForeignKey("candidate_profiles.id"), nullable=False, index=True
+    )
+    score: Mapped[int] = mapped_column(nullable=False)
+    matched_skills: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    missing_skills: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    role_match: Mapped[bool | None]
+    location_match: Mapped[bool | None]
+    eligibility_match: Mapped[bool | None]
+    explanation: Mapped[str] = mapped_column(Text, nullable=False)
+    evaluation_method: Mapped[str] = mapped_column(String(50), nullable=False, default="rule_based_v1")
+    assessed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    job: Mapped[Job] = relationship(back_populates="fit_assessments")
+    candidate_profile: Mapped["CandidateProfileRecord"] = relationship(
+        back_populates="fit_assessments"
+    )
+
+
 class CandidateProfileRecord(Base):
     __tablename__ = "candidate_profiles"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -77,6 +124,9 @@ class CandidateProfileRecord(Base):
     experience_keywords: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
     work_authorization: Mapped[str | None] = mapped_column(String(255))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    fit_assessments: Mapped[list["JobFitAssessment"]] = relationship(
+        back_populates="candidate_profile", cascade="all, delete-orphan"
+    )
 
 
 class Contact(Base):
