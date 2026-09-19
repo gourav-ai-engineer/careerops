@@ -214,7 +214,7 @@ async def run_career_pipeline(
             )
 
         finish_run(
-            db, run, status="succeeded", input_count=1, output_count=len(results),
+            db, run, status="succeeded", output_count=len(results),
             summary={"processed": len(results), "warnings": len(warnings)},
         )
         return CareerPipelineResult(run_id=run.id, processed=len(results), items=results, warnings=warnings)
