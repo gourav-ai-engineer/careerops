@@ -6,6 +6,7 @@ from app.extraction_routes import router as extraction_router
 from app.ingestion_routes import router as ingestion_router
 from app.job_routes import router as job_router
 from app.job_verification_routes import router as job_verification_router
+from app.pipeline_routes import router as pipeline_router
 
 app = FastAPI(
     title="CareerOps",
@@ -19,6 +20,7 @@ app.include_router(extraction_router)
 app.include_router(ingestion_router)
 app.include_router(job_router)
 app.include_router(job_verification_router)
+app.include_router(pipeline_router)
 
 
 @app.get("/", tags=["system"])
