@@ -12,8 +12,10 @@
 8. Persist extracted job requirements, including required skills and extraction metadata.
 9. Evaluate eligibility, role fit, location fit, and skill fit against the candidate profile.
 10. Persist a transparent fit assessment in PostgreSQL.
-11. Produce a dry-run Smartsheet change preview.
-12. Synchronize only approved and verified records.
+11. Discover legitimate public professional contacts through replaceable provider adapters.
+12. Persist contact source evidence, provider, verification state, and confidence.
+13. Produce a dry-run Smartsheet change preview.
+14. Synchronize only approved and verified records.
 
 ### Verification rules
 
@@ -34,13 +36,23 @@
 - Required skills come from the persisted job-requirements record when available.
 - Fit assessments are keyed by job and candidate profile so reruns update the same assessment instead of creating duplicates.
 
+### Contact discovery rules
+
+- Providers implement a common adapter contract and can be added without changing the persistence layer.
+- The current provider reads only public business contact data from HTTPS pages on the supplied company domain or its subdomains.
+- Provider results are persisted with source URL, provider name, verification status, confidence, and timestamp.
+- Discovery does not infer phone numbers, bypass authentication, scrape private profiles, or classify personal numbers as recruiting contacts.
+- A discovered contact may optionally be linked to the originating job through the job-contact relationship.
+
 ## Contact workflow
 
 1. Resolve the employer domain from a verified job.
-2. Query configured providers through adapters.
-3. Prefer official recruiting/campus contacts and public professional work details.
-4. Store provider, source URL, verification status, confidence, and retrieval time.
-5. Never infer, scrape, or store private/personal phone numbers.
+2. Build a discovery context containing company, domain, source URLs, and optional role keywords.
+3. Run configured provider adapters.
+4. Validate and persist each discovered professional contact.
+5. Persist evidence for every provider result.
+6. Optionally associate contacts with the originating job.
+7. Allow later providers to be added without changing the API contract.
 
 ## Resume workflow
 
