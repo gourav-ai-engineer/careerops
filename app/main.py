@@ -2,15 +2,17 @@ from fastapi import FastAPI
 
 from app.contact_routes import router as contact_router
 from app.job_routes import router as job_router
+from app.job_verification_routes import router as job_verification_router
 
 app = FastAPI(
     title="CareerOps",
-    version="0.3.0",
+    version="0.4.0",
     description="Job and recruiter intelligence pipeline.",
 )
 
 app.include_router(contact_router)
 app.include_router(job_router)
+app.include_router(job_verification_router)
 
 
 @app.get("/", tags=["system"])
