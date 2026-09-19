@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.job_verification import verify_job_source
+from app.job_verification_service import verify_and_record
 from app.models import Job, JobSourceEvidence
 from app.official_verification import verify_official_domain
 
@@ -55,6 +56,20 @@ class SourceEvidenceResponse(BaseModel):
     checked_at: datetime
 
 
+class JobVerificationDecisionRequest(BaseModel):
+    decision: Literal["verified", "rejected"]
+    reason: str | None = None
+
+
+class JobVerificationDecisionResponse(BaseModel):
+    job_id: int
+    previous_status: str
+    status: str
+    reason: str
+    evidence_id: int
+    evidence_status: str
+
+
 @router.post("/verify-source", response_model=JobVerificationResponse)
 def verify_source(payload: JobVerificationRequest) -> JobVerificationResponse:
     result = verify_job_source(
@@ -71,6 +86,36 @@ def verify_official_domain_route(payload: OfficialDomainRequest) -> OfficialDoma
                                   candidate_host=result.candidate_host, company_host=result.company_host)
 
 
+@router.post("/{job_id}/verification", response_model=JobVerificationDecisionResponse)
+def decide_job_verification(
+    job_id: int,
+    payload: JobVerificationDecisionRequest,
+    db: Session = Depends(get_db),
+) -> JobVerificationDecisionResponse:
+    job = db.scalar(select(Job).where(Job.id == job_id))
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    try:
+        result = verify_and_record(
+            db,
+            job,
+            decision=payload.decision,
+            reason=payload.reason,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    return JobVerificationDecisionResponse(
+        job_id=job_id,
+        previous_status=result.previous_status,
+        status=result.current_status,
+        reason=result.reason,
+        evidence_id=result.evidence.id,
+        evidence_status=result.evidence.verification_status,
+    )
+
+
 @router.post("/{job_id}/source-evidence", response_model=SourceEvidenceResponse, status_code=201)
 def add_source_evidence(
     job_id: int,
@@ -81,14 +126,21 @@ def add_source_evidence(
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    screened = verify_job_source(str(payload.source_url), str(payload.source_url),
-                                 job.company.domain if job.company else None)
+    screened = verify_job_source(
+        str(payload.source_url),
+        str(payload.source_url),
+        job.company.domain if job.company else None,
+    )
     status = payload.verification_status or screened.status
     reason = payload.verification_reason or screened.reason
 
-    evidence = JobSourceEvidence(job_id=job_id, source_url=str(payload.source_url),
-                                 source_type=payload.source_type, verification_status=status,
-                                 verification_reason=reason)
+    evidence = JobSourceEvidence(
+        job_id=job_id,
+        source_url=str(payload.source_url),
+        source_type=payload.source_type,
+        verification_status=status,
+        verification_reason=reason,
+    )
     db.add(evidence)
     db.commit()
     db.refresh(evidence)
@@ -100,5 +152,10 @@ def list_source_evidence(job_id: int, db: Session = Depends(get_db)) -> list[Job
     job = db.scalar(select(Job).where(Job.id == job_id))
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
-    return list(db.scalars(select(JobSourceEvidence).where(JobSourceEvidence.job_id == job_id)
-                           .order_by(JobSourceEvidence.checked_at.desc())))
+    return list(
+        db.scalars(
+            select(JobSourceEvidence)
+            .where(JobSourceEvidence.job_id == job_id)
+            .order_by(JobSourceEvidence.checked_at.desc())
+        )
+    )
