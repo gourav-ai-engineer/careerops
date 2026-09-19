@@ -14,11 +14,11 @@
 10. Persist a transparent fit assessment in PostgreSQL.
 11. Discover legitimate public professional contacts through replaceable provider adapters.
 12. Persist contact source evidence, provider, verification state, and confidence.
-13. Build a dry-run Smartsheet synchronization plan.
+13. Build a dry-run Smartsheet synchronization plan for jobs and contacts.
 14. Synchronize only verified and later-stage jobs after preview review.
 15. Keep PostgreSQL as the system of record and Smartsheet as an operational view.
 
-### Smartsheet synchronization rules
+### Smartsheet job synchronization rules
 
 - Sync is explicitly split into dry-run planning and apply operations.
 - The current job tracker mapping targets Company, Role, Location, Eligibility, Fit Score, Application Status, Apply Link, Source, and Last Checked.
@@ -28,6 +28,16 @@
 - Jobs in pre-verification states are excluded from synchronization.
 - No delete operation is performed by the sync engine.
 - Credentials are read from environment configuration and never stored in source control.
+
+### Smartsheet contact synchronization rules
+
+- Contact sync updates existing job rows; it does not create a second job row when the corresponding job row is missing.
+- The current mapping uses Recruiter / Contact, Recruiter LinkedIn, and Recruiter Verification.
+- Only linked contacts with source_checked or verified status are eligible.
+- The contact cell can contain public professional email and phone details only when already present in the PostgreSQL contact record with its professional phone type metadata.
+- LinkedIn values are copied only from the explicit linkedin_url field; they are never inferred from a name.
+- Contact updates are planned before being applied, and only changed contact cells are sent.
+- No delete operation is performed by contact sync.
 
 ### Verification rules
 
