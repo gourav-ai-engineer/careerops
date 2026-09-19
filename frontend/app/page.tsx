@@ -39,6 +39,9 @@ export default function Dashboard() {
   const [jobs, setJobs] = useState<Summary["recent_jobs"]>([]);
   const [contacts, setContacts] = useState<ContactList | null>(null);
   const [drafts, setDrafts] = useState<Draft[]>([]);
+  const [masterName, setMasterName] = useState("Master Resume");
+  const [masterContent, setMasterContent] = useState("");
+  const [resumeSaved, setResumeSaved] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -51,10 +54,15 @@ export default function Dashboard() {
         api<{items: Summary["recent_jobs"]}>("/jobs?page=1&page_size=50"),
         api<ContactList>("/contacts/list?page=1&page_size=50"),
         api<Draft[]>("/resume/drafts?limit=50"),
+        api<{id:number; name:string; version:number; content:string} | null>("/resume/master"),
       ]);
       setJobs(j.items);
       setContacts(c);
       setDrafts(d);
+      if (master) {
+        setMasterName(master.name);
+        setMasterContent(master.content);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to load dashboard");
     }
@@ -71,6 +79,24 @@ export default function Dashboard() {
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Fit recalculation failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveMaster = async () => {
+    setBusy(true);
+    setResumeSaved(false);
+    try {
+      await api("/resume/master", {
+        method: "PUT",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({name: masterName, content: masterContent}),
+      });
+      setResumeSaved(true);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Master resume save failed");
     } finally {
       setBusy(false);
     }
@@ -144,6 +170,13 @@ export default function Dashboard() {
       )}
 
       {tab === "resume" && (
+        <>
+        <section className="panel">
+          <div className="panelHead"><div><h2>Master resume</h2><p>Stored source document. Draft generation never overwrites it.</p></div><button className="primary" onClick={saveMaster} disabled={busy}>{busy ? "Saving…" : "Save master"}</button></div>
+          <input className="resumeName" value={masterName} onChange={e => setMasterName(e.target.value)} placeholder="Resume name" />
+          <textarea className="resumeEditor" value={masterContent} onChange={e => setMasterContent(e.target.value)} placeholder="Paste your master resume text here." />
+          {resumeSaved && <p className="success">Master resume saved.</p>}
+        </section>
         <section className="panel">
           <div className="panelHead"><div><h2>Resume drafts</h2><p>Drafts remain reviewable and never overwrite the master automatically.</p></div></div>
           <div className="drafts">
@@ -159,6 +192,7 @@ export default function Dashboard() {
             ))}
           </div>
         </section>
+        </>
       )}
 
       <footer><span>CareerOps v1.0</span><span>PostgreSQL → API → Dashboard / Smartsheet / Windmill</span></footer>
