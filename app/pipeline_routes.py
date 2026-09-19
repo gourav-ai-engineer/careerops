@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, File, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.audit import record_audit
 from app.career_pipeline import run_career_pipeline
 from app.database import get_db
+from app.ingestion import IngestedJob, parse_csv_jobs, parse_whatsapp_export
 from app.pipeline_ingestion import process_text
 from app.run_service import finish_run, start_run
 
@@ -101,6 +102,18 @@ def ingest_pipeline(payload: PipelineRequest, db: Session = Depends(get_db)) -> 
         raise
 
 
+
+def _records_to_text(records: list[IngestedJob]) -> str:
+    lines: list[str] = []
+    for item in records:
+        parts = [item.company_name, item.title]
+        if item.location:
+            parts.append(item.location)
+        suffix = f" {item.application_url}" if item.application_url else ""
+        lines.append(" | ".join(parts) + suffix)
+    return "\n".join(lines)
+
+
 @router.post("/run", response_model=PipelineRunResponse)
 async def run_pipeline(
     payload: PipelineRunRequest,
@@ -134,4 +147,70 @@ async def run_pipeline(
             )
             for item in result.items
         ],
+    )
+
+
+
+async def _run_uploaded_export(
+    content: bytes,
+    parser,
+    *,
+    live_check: bool,
+    discover_contacts: bool,
+    smartsheet_dry_run: bool,
+    generate_resume_drafts: bool,
+    db: Session,
+) -> PipelineRunResponse:
+    records = parser(content.decode("utf-8-sig"))
+    if not records:
+        return PipelineRunResponse(run_id=0, processed=0, warnings=["No supported job records were found in the uploaded file"], items=[])
+    return await run_pipeline(
+        PipelineRunRequest(
+            text=_records_to_text(records),
+            live_check=live_check,
+            discover_contacts=discover_contacts,
+            smartsheet_dry_run=smartsheet_dry_run,
+            generate_resume_drafts=generate_resume_drafts,
+        ),
+        db,
+    )
+
+
+@router.post("/whatsapp-export", response_model=PipelineRunResponse)
+async def run_whatsapp_export(
+    file: UploadFile = File(...),
+    live_check: bool = False,
+    discover_contacts: bool = False,
+    smartsheet_dry_run: bool = False,
+    generate_resume_drafts: bool = False,
+    db: Session = Depends(get_db),
+) -> PipelineRunResponse:
+    return await _run_uploaded_export(
+        await file.read(),
+        parse_whatsapp_export,
+        live_check=live_check,
+        discover_contacts=discover_contacts,
+        smartsheet_dry_run=smartsheet_dry_run,
+        generate_resume_drafts=generate_resume_drafts,
+        db=db,
+    )
+
+
+@router.post("/csv", response_model=PipelineRunResponse)
+async def run_csv_export(
+    file: UploadFile = File(...),
+    live_check: bool = False,
+    discover_contacts: bool = False,
+    smartsheet_dry_run: bool = False,
+    generate_resume_drafts: bool = False,
+    db: Session = Depends(get_db),
+) -> PipelineRunResponse:
+    return await _run_uploaded_export(
+        await file.read(),
+        parse_csv_jobs,
+        live_check=live_check,
+        discover_contacts=discover_contacts,
+        smartsheet_dry_run=smartsheet_dry_run,
+        generate_resume_drafts=generate_resume_drafts,
+        db=db,
     )
