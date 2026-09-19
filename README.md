@@ -27,7 +27,7 @@ Core capabilities:
 
 System: GET /, GET /health, GET /health/db
 Jobs: GET /jobs, GET /jobs/{id}, POST /jobs/intake, PATCH /jobs/{id}/company-domain, PATCH /jobs/{id}/status, POST /jobs/{id}/verify-live, POST /jobs/{id}/fit-assessment, POST /jobs/fit-assessments/verified
-Ingestion: POST /ingestion/csv, POST /ingestion/whatsapp-export, POST /pipeline/ingest, POST /pipeline/run, POST /extraction/jobs
+Ingestion: POST /ingestion/csv, POST /ingestion/whatsapp-export, POST /pipeline/csv, POST /pipeline/whatsapp-export, POST /pipeline/ingest, POST /pipeline/run, POST /extraction/jobs
 Contacts: POST /contacts, POST /contacts/discover, GET /contacts/list, GET /contacts/duplicates, POST /contacts/merge
 Resume: GET /resume/master, PUT /resume/master, POST /resume/drafts/{job_id}, GET /resume/drafts, PATCH /resume/drafts/{draft_id}
 Dashboard: GET /dashboard/summary
@@ -45,7 +45,7 @@ Never commit .env, tokens, API keys, or private contact data.
 
 ## Full pipeline endpoint
 
-Use POST /pipeline/run for the staged end-to-end execution. Its flags are live_check, discover_contacts, smartsheet_dry_run, and generate_resume_drafts. The endpoint never auto-verifies a job and never applies Smartsheet writes. Those gates stay explicit so every external action remains reviewable.
+Use POST /pipeline/run for staged end-to-end execution from text. Use POST /pipeline/csv or POST /pipeline/whatsapp-export for uploaded source files; they normalize the upload into the same pipeline. Its flags are live_check, discover_contacts, smartsheet_dry_run, and generate_resume_drafts. The endpoint never auto-verifies a job and never applies Smartsheet writes. Those gates stay explicit so every external action remains reviewable.
 
 Operational sequence: ingest -> extract/normalize -> deduplicate -> official-source screening -> optional live check -> explicit verification -> fit -> public professional contacts -> Smartsheet dry-run -> reviewed apply -> resume draft review.
 
