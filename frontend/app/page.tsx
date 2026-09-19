@@ -50,7 +50,7 @@ export default function Dashboard() {
       setError("");
       const s = await api<Summary>("/dashboard/summary");
       setSummary(s);
-      const [j, c, d] = await Promise.all([
+      const [j, c, d, master] = await Promise.all([
         api<{items: Summary["recent_jobs"]}>("/jobs?page=1&page_size=50"),
         api<ContactList>("/contacts/list?page=1&page_size=50"),
         api<Draft[]>("/resume/drafts?limit=50"),
