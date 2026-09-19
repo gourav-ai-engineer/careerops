@@ -1,21 +1,49 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: careerops-postgres
-    restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-careerops}
-      POSTGRES_USER: ${POSTGRES_USER:-careerops}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-local-only}
+      POSTGRES_DB: careerops
+      POSTGRES_USER: careerops
+      POSTGRES_PASSWORD: change-me-local-only
     ports:
       - "5432:5432"
     volumes:
-      - careerops_pgdata:/var/lib/postgresql/data
+      - careerops_postgres:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-careerops} -d ${POSTGRES_DB:-careerops}"]
+      test: ["CMD-SHELL", "pg_isready -U careerops -d careerops"]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 20
+
+  api:
+    build: .
+    environment:
+      DATABASE_URL: postgresql+psycopg://careerops:change-me-local-only@postgres:5432/careerops
+      FRONTEND_ORIGIN: http://localhost:3000
+      SMARTSHEET_ACCESS_TOKEN:
+      SMARTSHEET_JOBS_SHEET_ID: "3084190078947204"
+      SMARTSHEET_CAMPUS_SHEET_ID: "156499851825028"
+      HUNTER_API_KEY:
+      API_KEY:
+      PROVIDER_REQUESTS_PER_MINUTE: "50"
+      HTTP_TIMEOUT_SECONDS: "10"
+      LOG_LEVEL: INFO
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    command: ["sh", "-c", "python -m app.init_db && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+
+  frontend:
+    build:
+      context: ./frontend
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+    depends_on:
+      - api
+    ports:
+      - "3000:3000"
 
 volumes:
-  careerops_pgdata:
+  careerops_postgres:
