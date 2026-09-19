@@ -35,16 +35,10 @@ class Job(Base):
     company: Mapped[Company] = relationship(back_populates="jobs")
     contacts: Mapped[list["JobContact"]] = relationship(back_populates="job")
     source_evidence: Mapped[list["JobSourceEvidence"]] = relationship(back_populates="job", cascade="all, delete-orphan")
-    status_history: Mapped[list["JobStatusHistory"]] = relationship(
-        back_populates="job", cascade="all, delete-orphan",
-        order_by="JobStatusHistory.changed_at.desc()",
-    )
-    requirements: Mapped["JobRequirement | None"] = relationship(
-        back_populates="job", cascade="all, delete-orphan", uselist=False
-    )
-    fit_assessments: Mapped[list["JobFitAssessment"]] = relationship(
-        back_populates="job", cascade="all, delete-orphan"
-    )
+    status_history: Mapped[list["JobStatusHistory"]] = relationship(back_populates="job", cascade="all, delete-orphan", order_by="JobStatusHistory.changed_at.desc()")
+    requirements: Mapped["JobRequirement | None"] = relationship(back_populates="job", cascade="all, delete-orphan", uselist=False)
+    fit_assessments: Mapped[list["JobFitAssessment"]] = relationship(back_populates="job", cascade="all, delete-orphan")
+    resume_drafts: Mapped[list["ResumeDraft"]] = relationship(back_populates="job", cascade="all, delete-orphan")
 
 
 class JobSourceEvidence(Base):
@@ -111,9 +105,7 @@ class CandidateProfileRecord(Base):
     experience_keywords: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
     work_authorization: Mapped[str | None] = mapped_column(String(255))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
-    fit_assessments: Mapped[list["JobFitAssessment"]] = relationship(
-        back_populates="candidate_profile", cascade="all, delete-orphan"
-    )
+    fit_assessments: Mapped[list["JobFitAssessment"]] = relationship(back_populates="candidate_profile", cascade="all, delete-orphan")
 
 
 class Contact(Base):
@@ -134,10 +126,8 @@ class Contact(Base):
     verification_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     priority: Mapped[str | None] = mapped_column(String(10))
     company: Mapped[Company] = relationship(back_populates="contacts")
-    jobs: Mapped[list["JobContact"]] = relationship(back_populates="jobs")
-    evidence: Mapped[list["ContactEvidence"]] = relationship(
-        back_populates="contact", cascade="all, delete-orphan"
-    )
+    jobs: Mapped[list["JobContact"]] = relationship(back_populates="contact")
+    evidence: Mapped[list["ContactEvidence"]] = relationship(back_populates="contact", cascade="all, delete-orphan")
 
 
 class ContactEvidence(Base):
@@ -160,3 +150,59 @@ class JobContact(Base):
     relevance_reason: Mapped[str | None] = mapped_column(Text)
     job: Mapped[Job] = relationship(back_populates="contacts")
     contact: Mapped[Contact] = relationship(back_populates="jobs")
+
+
+class ProcessingRun(Base):
+    __tablename__ = "processing_runs"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    run_type: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="running", index=True)
+    correlation_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    input_count: Mapped[int] = mapped_column(nullable=False, default=0)
+    output_count: Mapped[int] = mapped_column(nullable=False, default=0)
+    error_count: Mapped[int] = mapped_column(nullable=False, default=0)
+    summary: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    error_message: Mapped[str | None] = mapped_column(Text)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class AuditEvent(Base):
+    __tablename__ = "audit_events"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    entity_type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    entity_id: Mapped[int | None] = mapped_column(index=True)
+    action: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    actor: Mapped[str] = mapped_column(String(100), nullable=False, default="system")
+    metadata_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ResumeDocument(Base):
+    __tablename__ = "resume_documents"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    document_type: Mapped[str] = mapped_column(String(30), nullable=False, default="master")
+    version: Mapped[int] = mapped_column(nullable=False, default=1)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    is_master: Mapped[bool] = mapped_column(default=False, nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    drafts: Mapped[list["ResumeDraft"]] = relationship(back_populates="master_resume")
+
+
+class ResumeDraft(Base):
+    __tablename__ = "resume_drafts"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id"), nullable=False, index=True)
+    master_resume_id: Mapped[int] = mapped_column(ForeignKey("resume_documents.id"), nullable=False)
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="draft", index=True)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    change_plan: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    matched_keywords: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    missing_keywords: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    job: Mapped[Job] = relationship(back_populates="resume_drafts")
+    master_resume: Mapped[ResumeDocument] = relationship(back_populates="drafts")
